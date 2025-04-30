@@ -9,8 +9,9 @@ Lcd::Lcd(int address, int columns, int rows) : _lcd(address, columns, rows) //co
 
 }
 
-void Lcd::write(String message) 
+void Lcd::write(const char *message) 
 {
+    _lcd.clear(); 
     _lcd.setCursor(0,0);
     _lcd.print(message);
 }
