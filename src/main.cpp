@@ -3,8 +3,8 @@
 void setup() {
   // Instantiate the LCD
   Lcd lcd(0x27, 16, 2);
-  
-  lcd.write("Hello, World!");
+
+  lcd.write("Hello, World!2");
 }
 
 void loop() {
