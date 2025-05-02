@@ -4,11 +4,8 @@ void setup() {
   // Instantiate the LCD
   Lcd lcd(0x27, 16, 2);
 
-  lcd.write("0123456789ABCDEF1123456789ABCDEF");
-
-  delay(1000);
-
-  lcd.write("Another message");
+  // lcd.write("Another message");
+  lcd.printString("This is example text that should need more than one line to print. Here's more text. Visit https://bertwagner.com/testurl for more help.");
 }
 
 void loop() {
