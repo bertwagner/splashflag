@@ -1,60 +1,108 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
 #include "Lcd.h"
-
-
 
 Lcd::Lcd(int address, int columns, int rows) : _lcd(address, columns, rows) //constructor initialization list
 {
     _lcd.init();
-    _lcd.clear();         
-    _lcd.backlight();   
-
+    _lcd.clear();           
 }
 
 void Lcd::write(const char *message) 
 {
-    _lcd.clear(); 
-    _lcd.setCursor(0,0);
-    _lcd.print(message);
-}
+    _lcd.backlight(); 
 
-std::vector<std::vector<char>> Lcd::_parseMessage(const char *message)
-{
-    std::vector<std::vector<char>> screens;
+    int screen_count;
+    LCDScreen *screens = _format_for_lcd(message, &screen_count);
 
-    std::vector<char> screen;
-
-    screen.insert(0, "Hello");
-    screen.insert(1, "Bert");
-
-    return screens;
-}
-
-const int lcdCols = 16; //Number of columns in my lcd
-const int lcdRows = 2;//Number of rows in my lcd
-const int delayTime = 1000; //Value in milliseconds to delay the scroll
-
-char text[] = "This is example text that should need more than one line to print. Here's more text."; //The actual text
-
-void Lcd::printString(char *text) {
-    char temp[lcdCols + 1];
-    int iterations;
-    int len = strlen(text);
-  
-    if (len <= lcdCols) {  //Prints the string if its length is
-        _lcd.clear(); 
-        _lcd.setCursor(0,0);
-        _lcd.print(text);
-      return;
-    }
-
-    iterations = len / lcdCols + 1;
-    for (int counter = 0; counter < iterations; counter++) {
-      strncpy(temp, &text[counter * lcdCols], lcdCols);
-      temp[lcdCols] = '\0';
+    for (int i = 0; i < screen_count; i++) {
       _lcd.clear(); 
+
       _lcd.setCursor(0,0);
-      _lcd.print(temp);
-      delay(delayTime);
+      _lcd.print(screens[i].line1);
+
+      _lcd.setCursor(0,1);
+      _lcd.print(screens[i].line2);
+      
+      delay(SCROLL_DELAY);
     }
-    Serial.println();
+
+    free(screens);
+
+    _lcd.clear();
+    _lcd.noBacklight();
+}
+
+void Lcd::_add_line(char *dest, const char *src, int *pos, int text_len) {
+  dest[0] = '\0';
+  int line_len = 0;
+
+  while (*pos < text_len) {
+      // Skip any leading spaces
+      while (*pos < text_len && isspace(src[*pos])) (*pos)++;
+
+      int word_start = *pos;
+      while (*pos < text_len && !isspace(src[*pos])) (*pos)++;
+      int word_len = *pos - word_start;
+
+      if (word_len == 0)
+          break;
+
+      // Word longer than LINE_LENGTH, needs to be split
+      if (word_len > LINE_LENGTH) {
+          int available = LINE_LENGTH - line_len;
+          if (available <= 0)
+              break;
+
+          strncat(dest, src + word_start, available);
+          line_len += available;
+          // rewind to unsplit rest of the word
+          *pos = word_start + available;
+          break;
+      }
+
+      // Check if word + space fits
+      int extra = (line_len > 0 ? 1 : 0) + word_len;
+      if (line_len + extra > LINE_LENGTH) {
+          // rewind to start of word
+          *pos = word_start;
+          break;
+      }
+
+      // Add space if not first word
+      if (line_len > 0) {
+          strcat(dest, " ");
+          line_len++;
+      }
+
+      strncat(dest, src + word_start, word_len);
+      line_len += word_len;
   }
+}
+
+LCDScreen* Lcd::_format_for_lcd(const char *text, int *screen_count) {
+  int text_len = strlen(text);
+  int pos = 0;
+  int capacity = 4;
+  int screen_idx = 0;
+
+  LCDScreen *screens = (LCDScreen *)malloc(capacity * sizeof(LCDScreen));
+  if (!screens) return NULL;
+
+  while (pos < text_len) {
+      if (screen_idx >= capacity) {
+          capacity *= 2;
+          screens = (LCDScreen *)realloc(screens, capacity * sizeof(LCDScreen));
+          if (!screens) return NULL;
+      }
+
+      _add_line(screens[screen_idx].line1, text, &pos, text_len);
+      _add_line(screens[screen_idx].line2, text, &pos, text_len);
+      screen_idx++;
+  }
+
+  *screen_count = screen_idx;
+  return screens;
+}
