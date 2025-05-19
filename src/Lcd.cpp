@@ -5,6 +5,10 @@
 #include "Lcd.h"
 
 Lcd::Lcd(int address, int columns, int rows) : _lcd(address, columns, rows) //constructor initialization list
+{       
+}
+
+void Lcd::init()
 {
     _lcd.init();
     _lcd.clear();           

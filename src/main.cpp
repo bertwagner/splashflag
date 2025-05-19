@@ -2,14 +2,13 @@
 #include "ServoFlag.h"
 
 
-
+Lcd lcd(0x27, 16, 2);
 ServoFlag servoFlag(9);
 
 void setup() {
   Serial.begin(115200);
 
-  // TODO: Move outside setup?
-  Lcd lcd(0x27, 16, 2);
+  lcd.init();
   lcd.write("Welcome to SplashFlag!");
   
   servoFlag.init();

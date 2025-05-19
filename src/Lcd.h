@@ -1,5 +1,3 @@
-#pragma once
-
 #include <LiquidCrystal_I2C.h>
 #include <vector>
 #include <Arduino.h>
@@ -16,6 +14,8 @@ typedef struct {
 class Lcd {
     public:
         Lcd(int address, int columns, int rows);
+
+        void init();
 
         void write(const char *message);
 
