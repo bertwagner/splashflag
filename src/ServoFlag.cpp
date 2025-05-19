@@ -1,22 +1,32 @@
 #include "ServoFlag.h"
-#include <ESP32Servo.h>
 
-Servo servo1; 
+
+
 
 ServoFlag::ServoFlag(int pin, int calibrationOffset)
 {   
-    _calibrationOffset = calibrationOffset;
+    _pin = pin;
+    _calibrationOffset = calibrationOffset;     
+}
 
-    servo1.attach(pin);
-    servo1.write(0+_calibrationOffset);
-         
+
+void ServoFlag::init()
+{
+    
+    Serial.printf("Init servo moving to %d \n", 0+_calibrationOffset);
+    delay(1000);
+
+    _servo1.attach(_pin);
+    _servo1.write(0+_calibrationOffset);
 }
 
 void ServoFlag::moveTo(int degrees) 
 {
+    Serial.printf("Moving to %d\n", degrees);
+    delay(1000);
+
     for(int posDegrees = 0+_calibrationOffset; posDegrees <= degrees+_calibrationOffset; posDegrees++) {
-        servo1.write(posDegrees);
-        Serial.println(posDegrees);
+        _servo1.write(posDegrees);
         delay(10);
       }
 }

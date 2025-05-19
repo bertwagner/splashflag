@@ -1,37 +1,24 @@
 #include "Lcd.h"
+#include "ServoFlag.h"
 
 
 
 static const int servoPin = 9;
-
-
+ServoFlag servoFlag(9,5);
 
 void setup() {
+  Serial.begin(115200);
 
-
+  // TODO: Move outside setup?
   Lcd lcd(0x27, 16, 2);
-
   lcd.write("Welcome to SplashFlag!");
-
-  
-
-  servo1.attach(servoPin);
-  servo1.write(0);
-  delay(2000);
-
-  int servoCalibrationOffset=5;
-
-  for(int posDegrees = 0+servoCalibrationOffset; posDegrees <= 90+servoCalibrationOffset; posDegrees++) {
-    servo1.write(posDegrees);
-    Serial.println(posDegrees);
-    delay(20);
-  }
-  delay(1000);
-
-  servo1.write(0+servoCalibrationOffset);
+  servoFlag.init();
+ 
 }
 
 void loop() {
-  
-
+  // servoFlag.moveTo(90);
+  // delay(3000);
+  // servoFlag.moveTo(0);
+  // delay(3000);
 }
