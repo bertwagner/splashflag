@@ -3,7 +3,7 @@
 
 class ServoFlag {
     public:
-        ServoFlag(int pin, int calibrationOffset);
+        ServoFlag(int pin);
 
         void init();
 
@@ -12,5 +12,4 @@ class ServoFlag {
     private:
         Servo _servo1; 
         int _pin;
-        int _calibrationOffset;
 };

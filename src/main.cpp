@@ -3,8 +3,7 @@
 
 
 
-static const int servoPin = 9;
-ServoFlag servoFlag(9,5);
+ServoFlag servoFlag(9);
 
 void setup() {
   Serial.begin(115200);
@@ -12,7 +11,14 @@ void setup() {
   // TODO: Move outside setup?
   Lcd lcd(0x27, 16, 2);
   lcd.write("Welcome to SplashFlag!");
+  
   servoFlag.init();
+
+  delay(2000);
+  servoFlag.moveTo(120);
+
+  delay(2000);
+  servoFlag.moveTo(90);
  
 }
 
