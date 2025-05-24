@@ -18,15 +18,44 @@ const char index_html[] PROGMEM = R"=====(
     <head>
       <title>ESP32 Captive Portal</title>
       <style>
-        body {background-color:#b00000;}
+        body {background-color:#8cd5ff;}
         h1 {color: white;}
         h2 {color: white;}
       </style>
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
     </head>
     <body>
-      <h1>Hello World!</h1>
-      <h2>This is a captive portal example. All requests will be redirected here </h2>
+      <h1>SplashFlag WiFi setup</h1>
+      <p>This SplashFlag device needs to connect to your home's WiFi so it can receive statuses for when the Wagner's are swimming.</p>
+
+    <form action="/save" method="POST">
+        <label for="ssid">WiFi SSID:</label><br>
+        <input type="text" id="ssid" name="ssid" required><br><br>
+        <label for="password">WiFi Password:</label><br>
+        <input type="password" id="password" name="password"><br><br>
+        <input type="submit" value="Connect">
+    </form>
+    </body>
+  </html>
+)=====";
+
+const char save_html[] PROGMEM = R"=====(
+  <!DOCTYPE html> <html>
+    <head>
+      <title>ESP32 Captive Portal</title>
+      <style>
+        body {background-color:#8cd5ff;}
+        h1 {color: white;}
+        h2 {color: white;}
+      </style>
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    </head>
+    <body>
+      <h1>Thanks!</h1>
+      <p>Saving your credentials...</p>
+      <p>If the SplashFlag successfully connects to your Wifi, the device will restart and display a success message.</p>
+      <p>If you are returned to the credentials screen, please try your credentials again.</p>
+
     </body>
   </html>
 )=====";
@@ -129,7 +158,29 @@ void CaptivePortal::setUpWebserver(AsyncWebServer &server, const IPAddress &loca
 		AsyncWebServerResponse *response = request->beginResponse(200, "text/html", index_html);
 		response->addHeader("Cache-Control", "public,max-age=31536000");  // save this file to cache for 1 year (unless you refresh)
 		request->send(response);
-		Serial.println("Served Basic HTML Page");
+		Serial.println("Served index page");
+	});
+
+    server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
+        String value1 = "";
+        String value2 = "";
+
+        if (request->hasParam("ssid",true)) {
+            value1 = request->getParam("ssid",true)->value();
+            Serial.printf("SSID: %s\n", value1);
+        }
+
+        if (request->hasParam("password",true)) {
+            value2 = request->getParam("password",true)->value();
+            Serial.printf("Password: %s\n", value2);
+        }
+
+        //TODO: Save these parameters and connect to the Wifi
+
+		AsyncWebServerResponse *response = request->beginResponse(200, "text/html", save_html);
+		response->addHeader("Refresh", "5; url=/");  // save this file to cache for 1 year (unless you refresh)
+		request->send(response);
+		Serial.println("Served save wifi page");
 	});
 
 	// the catch all
