@@ -162,17 +162,24 @@ void CaptivePortal::setUpWebserver(AsyncWebServer &server, const IPAddress &loca
 	});
 
     server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
-        String value1 = "";
-        String value2 = "";
+
+        char input_ssid[50] = {0};  // Static char array, initialized to zeros
+        char input_password[50] = {0};
 
         if (request->hasParam("ssid",true)) {
-            value1 = request->getParam("ssid",true)->value();
-            Serial.printf("SSID: %s\n", value1);
+            const char* value = request->getParam("ssid", true)->value().c_str();
+            strncpy(input_ssid, value, sizeof(input_ssid) - 1);
+            input_ssid[sizeof(input_ssid) - 1] = '\0'; // Ensure null termination
+
+            Serial.printf("SSID: %s\n", input_ssid);
         }
 
         if (request->hasParam("password",true)) {
-            value2 = request->getParam("password",true)->value();
-            Serial.printf("Password: %s\n", value2);
+            const char* value = request->getParam("password", true)->value().c_str();
+            strncpy(input_password, value, sizeof(input_password) - 1);
+            input_password[sizeof(input_password) - 1] = '\0'; // Ensure null termination
+
+            Serial.printf("Password: %s\n", input_password);
         }
 
         //TODO: Save these parameters and connect to the Wifi
@@ -201,3 +208,5 @@ void CaptivePortal::processNextDNSRequest()
     dnsServer.processNextRequest();	 // I call this atleast every 10ms in my other projects (can be higher but I haven't tested it for stability)
     delay(DNS_INTERVAL);			 // seems to help with stability, if you are doing other things in the loop this may not be needed
 };
+
+

@@ -6,7 +6,6 @@
 #include <ESPAsyncWebServer.h>	//https://github.com/me-no-dev/ESPAsyncWebServer using the latest dev version from @me-no-dev
 #include <esp_wifi.h>			//Used for mpdu_rx_disable android workaround
 
-
 class CaptivePortal {
     public:
         CaptivePortal();
