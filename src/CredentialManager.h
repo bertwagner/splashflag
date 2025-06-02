@@ -1,3 +1,5 @@
+
+#pragma once
 #include <Preferences.h>
 #include <tuple>
 
@@ -8,7 +10,7 @@ class CredentialManager
 
         void saveCredentials(const char *ssid, const char *password);
 
-        std::tuple<char*,char*> retrieveCredentials();
+        std::pair<char*,char*> retrieveCredentials();
 
         
 

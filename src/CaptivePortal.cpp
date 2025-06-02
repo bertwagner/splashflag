@@ -63,13 +63,14 @@ const char save_html[] PROGMEM = R"=====(
 DNSServer dnsServer;
 AsyncWebServer server(80);
 
-CaptivePortal::CaptivePortal()
+CaptivePortal::CaptivePortal(CredentialManager& credentialManager, Lcd& lcd) : credentialManager(credentialManager), lcd(lcd)
 {   
 
 }
 
 void CaptivePortal::init() 
 {
+
     // Print a welcome message to the Serial port.
 	Serial.println("\n\nCaptive Test, V0.5.0 compiled " __DATE__ " " __TIME__ " by CD_FER");  //__DATE__ is provided by the platformio ide
 	Serial.printf("%s-%d\n\r", ESP.getChipModel(), ESP.getChipRevision());
@@ -161,7 +162,7 @@ void CaptivePortal::setUpWebserver(AsyncWebServer &server, const IPAddress &loca
 		Serial.println("Served index page");
 	});
 
-    server.on("/save", HTTP_POST, [](AsyncWebServerRequest *request) {
+    server.on("/save", HTTP_POST, [this](AsyncWebServerRequest *request) {
 
         char input_ssid[50] = {0};  // Static char array, initialized to zeros
         char input_password[50] = {0};
@@ -182,12 +183,16 @@ void CaptivePortal::setUpWebserver(AsyncWebServer &server, const IPAddress &loca
             Serial.printf("Password: %s\n", input_password);
         }
 
-        //TODO: Save these parameters and connect to the Wifi
-
 		AsyncWebServerResponse *response = request->beginResponse(200, "text/html", save_html);
 		response->addHeader("Refresh", "5; url=/");  // save this file to cache for 1 year (unless you refresh)
 		request->send(response);
 		Serial.println("Served save wifi page");
+
+        // Save credentials and reset Arduino
+        credentialManager.saveCredentials(input_ssid,input_password);
+        lcd.write("Restarting SplashFlag...");
+        delay(2000);
+        esp_restart();
 	});
 
 	// the catch all

@@ -14,27 +14,35 @@ void Lcd::init()
     _lcd.clear();           
 }
 
-void Lcd::write(const char *message) 
+void Lcd::write(const char *message, int scrollRepeat) 
 {
     _lcd.backlight(); 
 
     int screen_count;
     LCDScreen *screens = _format_for_lcd(message, &screen_count);
 
-    for (int i = 0; i < screen_count; i++) {
-      _lcd.clear(); 
+    for (int s = 0; s < scrollRepeat; s++) {
+        for (int i = 0; i < screen_count; i++) {
+        _lcd.clear(); 
 
-      _lcd.setCursor(0,0);
-      _lcd.print(screens[i].line1);
+        _lcd.setCursor(0,0);
+        _lcd.print(screens[i].line1);
 
-      _lcd.setCursor(0,1);
-      _lcd.print(screens[i].line2);
-      
-      delay(SCROLL_DELAY);
+        _lcd.setCursor(0,1);
+        _lcd.print(screens[i].line2);
+        
+        delay(SCROLL_DELAY);
+        }
     }
 
     free(screens);
 
+    // _lcd.clear();
+    //_lcd.noBacklight();
+}
+
+void Lcd::turnOff()
+{
     _lcd.clear();
     _lcd.noBacklight();
 }

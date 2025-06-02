@@ -17,7 +17,7 @@ void CredentialManager::saveCredentials(const char *ssid, const char *password)
 
 };
 
-std::tuple<char*,char*> CredentialManager::retrieveCredentials()
+std::pair<char*,char*> CredentialManager::retrieveCredentials()
 {
     _preferences.begin("splashflag-app", false);
 
