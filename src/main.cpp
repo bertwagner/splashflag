@@ -12,6 +12,7 @@ CredentialManager credentialManager;
 CaptivePortal portal(credentialManager, lcd);
 
 int resetButtonState = 0;
+int wifiConnected = 0;
 
 void factoryReset() {
 	Serial.printf("FACTORY RESET");
@@ -25,11 +26,14 @@ void setup() {
 	while (!Serial)
 		;
 
+	// Reset button
+	pinMode(5, INPUT);
+
 	// Disconnect from APs if previously connected
 	WiFi.mode(WIFI_STA);
 	WiFi.disconnect();
 	delay(100);
-
+	wifiConnected = 0;
 	
 
 	delay(3000);
@@ -71,62 +75,60 @@ void setup() {
 			Serial.println("\nWiFi connected!");
 			Serial.print("IP address: ");
 			Serial.println(WiFi.localIP());
+			wifiConnected = 1;
+			lcd.write("SplashFlag wifi connected! The screen will now go blank until a pool announcement is made.");
+			lcd.turnOff();
+			servoFlag.init();
 		} else {
 			Serial.println("\nFailed to connect to WiFi. Resetting credentials.");
-			// TODO: If fail to connect to wifi, reset creds and have user connect to AP again.
-			//credentialManager.saveCredentials("", "");
-			//portal.init();
-			//lcd.write("Please connect to SplashFlag Wifi AP with your phone and visit http://4.3.2.1");
+			lcd.write("Wifi connection failed. Check your wifi connection. If problem persists, hold factory reset button for 10 seconds and re-enter Wifi password.");
+			//factoryReset();
+			esp_restart();
 		}
 	}
 
-	// If Wifi credentials exist connect.
-	// If unsuccessful or no credits, start captive portal.
-
 
 	
 	
-
-
-	
-	// Serial.printf("Creds in main thread: %s, %s\n", ssid, password);
-	// delay(3000);
-	// credentialManager.saveCredentials("SSID5","Password5");
-	// delay(3000);
-
-
-	
-
-	// servoFlag.init();
-
-	// delay(2000);
-	// servoFlag.moveTo(120);
-
-	// delay(2000);
-	// servoFlag.moveTo(90);
-
-	
-	
-	
-
-	
-
-	// Reset button
-	//pinMode(5, INPUT);
 }
 
 void loop() {
-  // servoFlag.moveTo(90);
-  // delay(3000);
-  // servoFlag.moveTo(0);
-  // delay(3000);
+	if (wifiConnected == 0) {
+		portal.processNextDNSRequest();
+	} else {
+		// Monitor for pool announcements.
+		// servoFlag.moveTo(90);
+		// delay(3000);
+		// servoFlag.moveTo(0);
+		// delay(3000);
+	}
 
-	portal.processNextDNSRequest();
 
-	// resetButtonState = digitalRead(5);
-	// Serial.printf("Reset button state: %d", resetButtonState);
+  
 
-	//delay(1000);
+	
+	// Reset if reset button has been held for 10 seconds
+	resetButtonState = digitalRead(5);
+	Serial.printf("Reset button state: %d\n", resetButtonState);
+	static unsigned long resetButtonPressedTime = 0;
+	static bool resetInProgress = false;
+
+	if (resetButtonState == HIGH) {
+		if (!resetInProgress) {
+			resetButtonPressedTime = millis();
+			resetInProgress = true;
+		} else if (millis() - resetButtonPressedTime >= 10000) {
+			factoryReset();
+			lcd.write("RESETTING TO FACTORY SETTINGS");
+			esp_restart();
+			Serial.printf("RESETTING\n");
+		}
+	} else {
+		resetInProgress = false;
+	}
+	delay(500);
+	Serial.printf("Reset button held for: %d\n", millis() - resetButtonPressedTime);
+
 }
 
 
