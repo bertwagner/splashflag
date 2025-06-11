@@ -55,6 +55,7 @@ void setup() {
 	char passwordarr[strlen(password)+1];
 	strcpy(passwordarr, password);
 
+	// TODO: Bug here - ssid is not null? after factory reset
 	if (ssid == nullptr || ssid[0] == '\0') {
 		Serial.printf("Blank SSID\n");
 		portal.init();
@@ -97,10 +98,10 @@ void loop() {
 		portal.processNextDNSRequest();
 	} else {
 		// Monitor for pool announcements.
-		// servoFlag.moveTo(90);
-		// delay(3000);
-		// servoFlag.moveTo(0);
-		// delay(3000);
+		servoFlag.moveTo(90);
+		delay(3000);
+		servoFlag.moveTo(0);
+		delay(3000);
 	}
 
 
@@ -120,6 +121,7 @@ void loop() {
 		} else if (millis() - resetButtonPressedTime >= 10000) {
 			factoryReset();
 			lcd.write("RESETTING TO FACTORY SETTINGS");
+			servoFlag.moveTo(0);
 			esp_restart();
 			Serial.printf("RESETTING\n");
 		}
