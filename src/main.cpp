@@ -50,13 +50,11 @@ void setup() {
 
 	char ssidarr[strlen(ssid)+1];
 	strcpy(ssidarr, ssid);
-	Serial.printf("ssidarr: %s\n", ssidarr);
 	
 	char passwordarr[strlen(password)+1];
 	strcpy(passwordarr, password);
 
-	// TODO: Bug here - ssid is not null? after factory reset
-	if (ssid == nullptr || ssid[0] == '\0') {
+	if (ssid == nullptr || strlen(ssidarr) == 0 || ssid[0] == '\0') {
 		Serial.printf("Blank SSID\n");
 		portal.init();
 		lcd.write("Please connect to SplashFlag Wifi AP with your phone and visit http://4.3.2.1");
