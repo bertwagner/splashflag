@@ -1,0 +1,19 @@
+services:
+  splashflag:
+    container_name: splashflag
+    image: splashflag:latest  # Replace with your actual image
+    networks:
+      - app-network
+
+  cloudflared:
+    container_name: cloudflared
+    image: cloudflare/cloudflared:latest
+    networks:
+      - app-network
+    command: tunnel run --token $CLOUDFLARE_TUNNEL_TOKEN
+    depends_on:
+      - splashflag
+
+networks:
+  app-network:
+    driver: bridge
