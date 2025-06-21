@@ -5,6 +5,18 @@ services:
     networks:
       - app-network
 
+  mosquitto:
+    container_name: mosquitto
+    image: eclipse-mosquitto:latest
+    networks: 
+      - app-network
+    ports:
+      - "1883:1883"
+    volumes:
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
+
   cloudflared:
     container_name: cloudflared
     image: cloudflare/cloudflared:latest
