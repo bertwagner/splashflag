@@ -11,9 +11,9 @@ services:
     networks: 
       - app-network
     volumes:
-      - mosquitto_config:/mosquitto/config
-      - mosquitto_data:/mosquitto/data
-      - mosquitto_log:/mosquitto/log
+      - ./mosquitto/config:/mosquitto/config
+      - ./mosquitto/data:/mosquitto/data
+      - ./mosquitto/log:/mosquitto/log
 
   cloudflared:
     container_name: cloudflared
@@ -28,8 +28,3 @@ services:
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  - mosquitto_config:
-  - mosquitto_data:
-  - mosquitto_log:
