@@ -10,8 +10,6 @@ services:
     image: eclipse-mosquitto:latest
     networks: 
       - app-network
-    ports:
-      - "1883:1883"
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
@@ -25,6 +23,7 @@ services:
     command: tunnel run --token $CLOUDFLARE_TUNNEL_TOKEN
     depends_on:
       - splashflag
+      - mosquitto
 
 networks:
   app-network:
