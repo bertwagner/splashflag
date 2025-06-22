@@ -6,10 +6,12 @@ services:
   #     - app-network
 
   mosquitto:
-    container_name: mosquitto
+    container_name: mosquitto 0.0.0.0
     image: eclipse-mosquitto:latest
     networks: 
       - app-network
+    ports:
+      - "9001:9001"
     volumes:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
