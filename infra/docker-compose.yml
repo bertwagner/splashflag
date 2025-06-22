@@ -6,7 +6,7 @@ services:
   #     - app-network
 
   mosquitto:
-    container_name: mosquitto 0.0.0.0
+    container_name: mosquitto
     image: eclipse-mosquitto:latest
     networks: 
       - app-network
