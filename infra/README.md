@@ -10,6 +10,8 @@ mosquitto_sub -h splashflag-mqtt.bertwagner.com -p 9001 -u splashflagclient -P $
 mosquitto_pub -h splashflag-mqtt.bertwagner.com -p 9001 -u splashflagclient -P $MOSQUITTO_PASSWORD -t splashflag/all -m 'hello' -q 1
 ```
 
+The Cloudflare tunnel has to point to the websocket port of the MQTT broker (http://mosquitto:9001 in thi setup). Any websocket pub/subs must then connect to the Cloudflare Tunnel endpoint over https/port 443. See the `mqtt-websocket-test.py` file for an example of publishing over websockets. 
+
 The Splashflag hardware is then able to receive MQTT messages from this broker.
 
 Make sure the environment variables `$MOSQUITTO_PASSWORD`, `$CLOUDFLARE_TUNNEL_TOKEN` are set.
