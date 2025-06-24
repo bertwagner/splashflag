@@ -3,3 +3,5 @@
 .DS_Store
 
 infra/mosquitto/config/passwd
+*.log
+*.db
