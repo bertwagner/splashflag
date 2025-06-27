@@ -1,0 +1,1 @@
+Make sure to rename `secrets.h.sample` to `secrets.h` and populate with your secrets.
