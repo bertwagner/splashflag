@@ -27,7 +27,7 @@ mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
 mqttc.on_publish = on_publish
 
 mqttc.user_data_set(unacked_publish)
-mqttc.username_pw_set("splashflagclient",os.environ.get("MOSQUITTO_PASSWORD")
+mqttc.username_pw_set("splashflagclient",os.environ.get("MOSQUITTO_PASSWORD"))
 mqttc.tls_set()
 mqttc.connect("splashflag-mqtt.bertwagner.com", 443)
 mqttc.loop_start()
