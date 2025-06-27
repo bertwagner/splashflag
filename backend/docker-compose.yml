@@ -23,7 +23,9 @@ services:
     image: cloudflare/cloudflared:latest
     networks:
       - app-network
-    command: tunnel run --token $CLOUDFLARE_TUNNEL_TOKEN
+    environment:
+      - CLOUDFLARE_TUNNEL_TOKEN
+    command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
       # - splashflag
       - mosquitto
