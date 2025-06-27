@@ -2,7 +2,7 @@
 .vscode
 .DS_Store
 
-infra/mosquitto/config/passwd
+backend/mosquitto/config/passwd
 *.log
 *.db
 .env
