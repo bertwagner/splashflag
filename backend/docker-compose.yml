@@ -1,10 +1,4 @@
 services:
-  # splashflag:
-  #   container_name: splashflag
-  #   image: splashflag:latest  # Replace with your actual image
-  #   networks:
-  #     - app-network
-
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto:latest
@@ -27,7 +21,6 @@ services:
       - CLOUDFLARE_TUNNEL_TOKEN
     command: tunnel run --token ${CLOUDFLARE_TUNNEL_TOKEN}
     depends_on:
-      # - splashflag
       - mosquitto
 
 networks:
