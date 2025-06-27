@@ -5,3 +5,4 @@
 infra/mosquitto/config/passwd
 *.log
 *.db
+.env
