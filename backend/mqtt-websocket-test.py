@@ -33,7 +33,7 @@ mqttc.connect("splashflag-mqtt.bertwagner.com", 443)
 mqttc.loop_start()
 
 # Our application produce some messages
-msg_info = mqttc.publish("splashflag/all", "hello world", qos=1)
+msg_info = mqttc.publish("splashflag/all", "hello world2", qos=1)
 unacked_publish.add(msg_info.mid)
 
 

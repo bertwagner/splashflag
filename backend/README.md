@@ -4,11 +4,13 @@ This Docker Compose file starts the [Eclipse Mosquitto MQTT broker service on We
 
 You must [setup authentication for Mosquitto](https://mosquitto.org/documentation/authentication-methods/) by creating a password file `mosquitto_passwd -c /mosquitto/config/passwd splashflagclient`.
 
-Helpful commands for testing/troubleshooting Mosquitto:
+
+Helpful command for testing/troubleshooting Mosquitto:
 ```
-mosquitto_sub -h splashflag-mqtt.bertwagner.com -p 9001 -u splashflagclient -P $MOSQUITTO_PASSWORD -t splashflag/all -q 1
-mosquitto_pub -h splashflag-mqtt.bertwagner.com -p 9001 -u splashflagclient -P $MOSQUITTO_PASSWORD -t splashflag/all -m 'hello' -q 1
+mosquitto_sub -u splashflagclient -P $MOSQUITTO_PASSWORD -t splashflag/all -q 1
+
 ```
+Note: the `mosquitto_sub` and `mosquitto_pub` utilities don't support websocket connections, only mqtt. Therefore, using them to test through the cloudflare tunnel isn't possible. You can run the above command within the mosquitto container to subscribe to the mqtt broker, but then run the `mqtt-websocket-test.py` file to test that websocket requests work over Cloudflare.
 
 The Cloudflare tunnel has to point to the websocket port of the MQTT broker (http://mosquitto:9001 in thi setup). Any websocket pub/subs must then connect to the Cloudflare Tunnel endpoint over https/port 443. See the `mqtt-websocket-test.py` file for an example of publishing over websockets. 
 
