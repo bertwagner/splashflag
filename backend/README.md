@@ -8,7 +8,8 @@ You must [setup authentication for Mosquitto](https://mosquitto.org/documentatio
 Helpful command for testing/troubleshooting Mosquitto:
 ```
 mosquitto_sub -u splashflagclient -P $MOSQUITTO_PASSWORD -t splashflag/all -q 1
-
+mosquitto_pub -u splashflag -P $MOSQUITTO_PASSWORD -t "splashflag/all"  -m '
+Hello!'
 ```
 Note: the `mosquitto_sub` and `mosquitto_pub` utilities don't support websocket connections, only mqtt. Therefore, using them to test through the cloudflare tunnel isn't possible. You can run the above command within the mosquitto container to subscribe to the mqtt broker, but then run the `mqtt-websocket-test.py` file to test that websocket requests work over Cloudflare.
 
