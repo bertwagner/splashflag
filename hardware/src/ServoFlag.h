@@ -12,4 +12,5 @@ class ServoFlag {
     private:
         Servo _servo1; 
         int _pin;
+        int _currentPositionDegrees = 0;
 };

@@ -15,6 +15,12 @@ void ServoFlag::init()
 
 void ServoFlag::moveTo(int degrees) 
 {
-    Serial.printf("Moving to %d\n", degrees);
-    _servo1.write(degrees);
+    //Serial.printf("Moving to %d\n", degrees);
+    if (degrees == _currentPositionDegrees) {
+        return;
+    } else {
+        _currentPositionDegrees = degrees;
+        _servo1.write(degrees);
+    }
+    
 }
