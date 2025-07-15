@@ -16,6 +16,8 @@ CaptivePortal portal(credentialManager, lcd);
 
 int resetButtonState = 0;
 bool mqttInitialized = false;
+unsigned long flagUpSecondsStartTime = 0;
+unsigned long flagUpSecondsRemaining = 0;
 
 WebSocketsClient client;
 MQTTPubSubClient mqtt;
@@ -128,23 +130,50 @@ void loop() {
 		mqtt.subscribe("splashflag/all", [](const String& payload, const size_t size) {
 			// Max message length is 110 characters
 			Serial.print("splashflag/all received: ");
-			Serial.println(payload);
-
-			// Allocate the JSON document
+			//Serial.println(payload);
 			JsonDocument doc;
-
-			// Parse JSON object
-			DeserializationError error = deserializeJson(doc, client);
+			DeserializationError error = deserializeJson(doc, payload);
 			if (error) {
-				Serial.print(F("deserializeJson() failed: "));
-				Serial.println(error.f_str());
-				client.stop();
+				Serial.print("deserializeJson() failed: ");
+				Serial.println(error.c_str());
 				return;
 			}
 
+			// Extract values from the JSON document
+			const char* message = doc["message"];
+			const char* current_time = doc["current_time"];
+			const char* expiration_time = doc["expiration_time"];
+
+			// Helper function to parse "YYYY-MM-DD HH:MM:SS" to time_t
+			auto parseDateTime = [](const char* datetime) -> time_t {
+				struct tm tm;
+				memset(&tm, 0, sizeof(tm));
+				sscanf(datetime, "%d-%d-%d %d:%d:%d",
+					&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+					&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
+				tm.tm_year -= 1900;
+				tm.tm_mon -= 1;
+				return mktime(&tm);
+			};
+
+			time_t currentTime = parseDateTime(current_time);
+			time_t expirationTime = parseDateTime(expiration_time);
+			flagUpSecondsRemaining = expirationTime - currentTime;
+
+			Serial.printf("currentTime: %d\n", flagUpSecondsRemaining);
+
+			unsigned long startTime = millis();
+			unsigned long elapsedSeconds = (millis() - startTime) / 1000;
+
+			Serial.print("Message: ");
+			Serial.println(message);
+			Serial.print("Current Time: ");
+			Serial.println(current_time);
+			Serial.print("Expiration Time: ");
+			Serial.println(expiration_time);
 
 			//Monitor for pool announcements.
-			servoFlag.moveTo(90);; 
+			servoFlag.moveTo(90);
 			delay(3000);
 			servoFlag.moveTo(0);
 			delay(3000);
