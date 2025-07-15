@@ -16,11 +16,10 @@ CaptivePortal portal(credentialManager, lcd);
 
 int resetButtonState = 0;
 bool mqttInitialized = false;
-unsigned long flagUpSecondsStartTime = 0;
-unsigned long flagUpSecondsRemaining = 0;
+unsigned long flagUpSecondsEndTime = 0;
 
 WebSocketsClient client;
-MQTTPubSubClient mqtt;
+MQTTPubSub::PubSubClient<512> mqtt;
 
 void connect() {
 connect_to_host:
@@ -128,8 +127,8 @@ void loop() {
 		connect();
 
 		mqtt.subscribe("splashflag/all", [](const String& payload, const size_t size) {
-			// Max message length is 110 characters
-			Serial.print("splashflag/all received: ");
+			// Max message length is ~490 characters
+			//Serial.print("splashflag/all received: ");
 			//Serial.println(payload);
 			JsonDocument doc;
 			DeserializationError error = deserializeJson(doc, payload);
@@ -158,26 +157,8 @@ void loop() {
 
 			time_t currentTime = parseDateTime(current_time);
 			time_t expirationTime = parseDateTime(expiration_time);
-			flagUpSecondsRemaining = expirationTime - currentTime;
-
-			Serial.printf("currentTime: %d\n", flagUpSecondsRemaining);
-
-			unsigned long startTime = millis();
-			unsigned long elapsedSeconds = (millis() - startTime) / 1000;
-
-			Serial.print("Message: ");
-			Serial.println(message);
-			Serial.print("Current Time: ");
-			Serial.println(current_time);
-			Serial.print("Expiration Time: ");
-			Serial.println(expiration_time);
-
-			//Monitor for pool announcements.
-			servoFlag.moveTo(90);
-			delay(3000);
-			servoFlag.moveTo(0);
-			delay(3000);
-
+			unsigned long flagUpDurationSeconds = expirationTime - currentTime;
+			flagUpSecondsEndTime = (millis() / 1000) + flagUpDurationSeconds;
 		});
 		mqttInitialized = true;
 		Serial.println("MQTT client initialized.");
@@ -198,9 +179,15 @@ void loop() {
 
   
 
-	// TODO: Get mqtt sub working and into a class
-	// TODO: Raise flag on message
+	// TODO: Refactor everything
+	// TODO: Keep message displayed for duration of flag up
 
+	if ((millis()/1000) < flagUpSecondsEndTime){
+		servoFlag.moveTo(90);
+	} else {
+		servoFlag.moveTo(0);
+		flagUpSecondsEndTime = 0; 
+	}
 	
 
 
