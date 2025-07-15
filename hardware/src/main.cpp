@@ -7,6 +7,7 @@
 #include "WiFi.h"
 #include <WebSocketsClient.h>  // include before MQTTPubSubClient.h
 #include <MQTTPubSubClient.h>
+#include <ArduinoJson.h>
 
 Lcd lcd(0x27, 16, 2);
 ServoFlag servoFlag(9);
@@ -118,15 +119,30 @@ void loop() {
 
 	if (!mqttInitialized) {
 		// Initialize the MQTT client
+		mqtt.disconnect();
 		mqtt.begin(client);
 
 		// connect to wifi, host and mqtt broker
 		connect();
 
-
 		mqtt.subscribe("splashflag/all", [](const String& payload, const size_t size) {
+			// Max message length is 110 characters
 			Serial.print("splashflag/all received: ");
 			Serial.println(payload);
+
+			// Allocate the JSON document
+			JsonDocument doc;
+
+			// Parse JSON object
+			DeserializationError error = deserializeJson(doc, client);
+			if (error) {
+				Serial.print(F("deserializeJson() failed: "));
+				Serial.println(error.f_str());
+				client.stop();
+				return;
+			}
+
+
 			//Monitor for pool announcements.
 			servoFlag.moveTo(90);; 
 			delay(3000);
@@ -138,12 +154,14 @@ void loop() {
 		Serial.println("MQTT client initialized.");
 
 	}
-
-	mqtt.update();  // should be called
-
 	if (!mqtt.isConnected()) {
-		connect();
+		//connect();
+		mqttInitialized = false;
+	} else {
+		mqtt.update();  // should be called
 	}
+
+	
 
 
 	
@@ -151,9 +169,7 @@ void loop() {
 
   
 
-	// TODO: Get servo working again
 	// TODO: Get mqtt sub working and into a class
-	// TODO: Move this mqtt all into the else above
 	// TODO: Raise flag on message
 
 	
@@ -161,7 +177,7 @@ void loop() {
 
 	// Reset if reset button has been held for 10 seconds
 	resetButtonState = digitalRead(4);
-	Serial.printf("Reset button state: %d\n", resetButtonState);
+	//Serial.printf("Reset button state: %d\n", resetButtonState);
 	static unsigned long resetButtonPressedTime = 0;
 	static bool resetInProgress = false;
 
