@@ -1,5 +1,6 @@
 # THIS FILE IS USED FOR TESTING/DEBUGGING THE CLOUDFLARE TUNNEL MQTT WEBSOCKET PROXY ONLY. 
 # IT IS NOT USED IN PRODUCTION.
+# Make sure your environment variable MOSQUITTO_PASSWORD is set
 
 import time
 import paho.mqtt.client as mqtt
@@ -27,7 +28,7 @@ mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
 mqttc.on_publish = on_publish
 
 mqttc.user_data_set(unacked_publish)
-mqttc.username_pw_set("splashflagclient",os.environ.get("MOSQUITTO_PASSWORD"))
+mqttc.username_pw_set("splashflag",os.environ.get("MOSQUITTO_PASSWORD"))
 mqttc.tls_set()
 mqttc.connect("splashflag-mqtt.bertwagner.com", 443)
 mqttc.loop_start()

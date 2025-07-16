@@ -7,7 +7,7 @@ You must [setup authentication for Mosquitto](https://mosquitto.org/documentatio
 
 Helpful command for testing/troubleshooting Mosquitto:
 ```
-mosquitto_sub -u splashflagclient -P $MOSQUITTO_PASSWORD -t splashflag/all -q 1
+mosquitto_sub -u splashflag -P $MOSQUITTO_PASSWORD -t splashflag/all -q 1
 mosquitto_pub -u splashflag -P $MOSQUITTO_PASSWORD -t "splashflag/all"  -m '
 Hello!'
 ```
