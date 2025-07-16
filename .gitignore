@@ -6,3 +6,4 @@ passwd
 *.log
 *.db
 .env
+.htpasswd
