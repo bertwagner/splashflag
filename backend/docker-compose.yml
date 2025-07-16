@@ -11,6 +11,7 @@ services:
       - ./mosquitto/config:/mosquitto/config
       - ./mosquitto/data:/mosquitto/data
       - ./mosquitto/log:/mosquitto/log
+      - ./mosquitto/http:/mosquitto/http
 
   cloudflared:
     container_name: cloudflared
