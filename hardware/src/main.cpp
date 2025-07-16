@@ -17,6 +17,7 @@ CaptivePortal portal(credentialManager, lcd);
 int resetButtonState = 0;
 bool mqttInitialized = false;
 unsigned long flagUpSecondsEndTime = 0;
+const char* message;
 
 WebSocketsClient client;
 MQTTPubSub::PubSubClient<512> mqtt;
@@ -77,14 +78,14 @@ void setup() {
 	strcpy(passwordarr, password);
 
 	if (ssid == nullptr || strlen(ssidarr) == 0 || ssid[0] == '\0') {
-		Serial.printf("Blank SSID\n");
+		//Serial.printf("Blank SSID\n");
 		portal.init();
 		lcd.write("Please connect to SplashFlag Wifi AP with your phone and visit http://4.3.2.1");
 	} else {		
 		// Attempt to connect to WiFi using saved credentials
 		WiFi.mode(WIFI_STA);
 		WiFi.begin(ssidarr, passwordarr);
-		Serial.print("Connecting to WiFi ..");
+		//Serial.print("Connecting to WiFi...");
 		int wifiConnectTries = 0;
 		const int maxTries = 20; // Try for ~20 seconds
 		while (WiFi.status() != WL_CONNECTED && wifiConnectTries < maxTries) {
@@ -139,7 +140,7 @@ void loop() {
 			}
 
 			// Extract values from the JSON document
-			const char* message = doc["message"];
+			message = doc["message"];
 			const char* current_time = doc["current_time"];
 			const char* expiration_time = doc["expiration_time"];
 
@@ -184,9 +185,11 @@ void loop() {
 
 	if ((millis()/1000) < flagUpSecondsEndTime){
 		servoFlag.moveTo(90);
+		lcd.write(message);
 	} else {
 		servoFlag.moveTo(0);
 		flagUpSecondsEndTime = 0; 
+		lcd.turnOff();
 	}
 	
 

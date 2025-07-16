@@ -6,7 +6,6 @@
 #define LINE_LENGTH 16
 #define LINES_PER_SCREEN 2
 #define SCROLL_DELAY 3000
-#define SCROLL_REPEAT 2
 
 typedef struct {
     char line1[LINE_LENGTH + 1];
