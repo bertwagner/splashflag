@@ -5,6 +5,7 @@
 import time
 import paho.mqtt.client as mqtt
 import os
+import base64
 
 def on_publish(client, userdata, mid, reason_code, properties):
     # reason_code and properties will only be present in MQTTv5. It's always unset in MQTTv3
@@ -27,10 +28,32 @@ unacked_publish = set()
 mqttc = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, transport="websockets")
 mqttc.on_publish = on_publish
 
+#MQTT broker auth
 mqttc.user_data_set(unacked_publish)
-mqttc.username_pw_set("splashflag",os.environ.get("MOSQUITTO_PASSWORD"))
+mqttc.username_pw_set(os.environ.get("MOSQUITTO_USERNAME"),os.environ.get("MOSQUITTO_PASSWORD"))
+
+
+# HTTP Basic Auth credentials for nginx
+http_username = os.environ.get("NGINX_BASIC_AUTH_USERNAME")
+http_password = os.environ.get("NGINX_BASIC_AUTH_PASSWORD")
+
+# Create Authorization header for HTTP basic auth
+auth_string = f"{http_username}:{http_password}"
+auth_bytes = auth_string.encode('ascii')
+auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+
+# Set custom headers for HTTP basic auth
+headers = {
+    "Authorization": f"Basic {auth_b64}"
+}
+
+# Set WebSocket options with authentication headers
+mqttc.ws_set_options(path="/", headers=headers)
+
+
+
 mqttc.tls_set()
-mqttc.connect("splashflag-mqtt.bertwagner.com", 443)
+mqttc.connect(os.environ.get("MQTT_SERVER_URL"), 443)
 mqttc.loop_start()
 
 # Our application produce some messages
