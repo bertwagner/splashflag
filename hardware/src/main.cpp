@@ -8,6 +8,7 @@
 #include <WebSocketsClient.h>  // include before MQTTPubSubClient.h
 #include <MQTTPubSubClient.h>
 #include <ArduinoJson.h>
+#include <base64.h>
 
 Lcd lcd(0x27, 16, 2);
 ServoFlag servoFlag(9);
@@ -26,7 +27,15 @@ void connect() {
 connect_to_host:
     Serial.println("connecting to host...");
     client.disconnect();
-    client.begin(MQTT_BROKER_URL, 80, "/", "mqtt"); 
+
+	// Create base64 encoded credentials
+    String credentials = HTTP_USERNAME ":" HTTP_PASSWORD;
+    String auth = "Basic " + base64::encode(credentials);
+    
+    // Set custom headers
+    client.setExtraHeaders(("Authorization: " + auth).c_str());
+
+    client.begin(MQTT_BROKER_URL, 80, "/", "mqtt");
 	// can use port 443 and .beginSSL(), but need to set up root certs on arduino
     client.setReconnectInterval(2000);
 
