@@ -7,3 +7,4 @@ passwd
 *.db
 .env
 .htpasswd
+secrets.js
