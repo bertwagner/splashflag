@@ -50,6 +50,7 @@ connect_to_host:
         }
     }
     Serial.println(" connected!");
+	// TODO: Only show message if doesn't connect 10 times?
 	lcd.write("Connected!");
 	lcd.turnOff();
 }
@@ -63,8 +64,8 @@ void factoryReset() {
 void setup() {
 	Serial.begin(115200);
 	// Wait for the Serial object to become available.
-	while (!Serial)
-		;
+	// while (!Serial)
+	// 	;
 
 	// Reset button
 	pinMode(4, INPUT);
@@ -141,7 +142,7 @@ void loop() {
 		mqtt.subscribe("splashflag/all", [](const String& payload, const size_t size) {
 			// Max message length is ~490 characters
 			//Serial.print("splashflag/all received: ");
-			//Serial.println(payload);
+			Serial.println(payload);
 			JsonDocument doc;
 			DeserializationError error = deserializeJson(doc, payload);
 			if (error) {
@@ -159,7 +160,7 @@ void loop() {
 			auto parseDateTime = [](const char* datetime) -> time_t {
 				struct tm tm;
 				memset(&tm, 0, sizeof(tm));
-				sscanf(datetime, "%d-%d-%d %d:%d:%d",
+				sscanf(datetime, "%d-%d-%dT%d:%d:%d",
 					&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
 					&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
 				tm.tm_year -= 1900;
