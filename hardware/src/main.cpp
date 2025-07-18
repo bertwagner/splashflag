@@ -33,7 +33,7 @@ connect_to_host:
     Serial.print("connecting to mqtt broker...");
     while (!mqtt.connect("arduino", MQTT_USERNAME, MQTT_PASSWORD)) {
         Serial.print(".");
-        delay(1000);
+        lcd.write("Connecting to SplashFlag...");
        
         if (!client.isConnected()) {
             Serial.println("WebSocketsClient disconnected");
@@ -41,6 +41,8 @@ connect_to_host:
         }
     }
     Serial.println(" connected!");
+	lcd.write("Connected!");
+	lcd.turnOff();
 }
 
 void factoryReset() {
