@@ -1,1 +1,363 @@
-hello world
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SplashFlag</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            padding: 40px;
+            width: 100%;
+            max-width: 500px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        h1 {
+            text-align: center;
+            color: #2c3e50;
+            margin-bottom: 30px;
+            font-weight: 600;
+            font-size: 1.8rem;
+        }
+
+        .form-group {
+            margin-bottom: 25px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #34495e;
+            font-weight: 500;
+            font-size: 0.9rem;
+        }
+
+        input, textarea {
+            width: 100%;
+            padding: 12px 16px;
+            border: 2px solid #e1e8ed;
+            border-radius: 12px;
+            font-size: 1rem;
+            transition: all 0.3s ease;
+            background: white;
+            color: #2c3e50;
+        }
+
+        input:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            transform: translateY(-2px);
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+            font-family: inherit;
+        }
+
+        .broker-settings {
+            background: rgba(102, 126, 234, 0.05);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(102, 126, 234, 0.1);
+        }
+
+        .broker-settings h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+            font-size: 1.1rem;
+        }
+
+        .broker-grid {
+            display: grid;
+            grid-template-columns: 2fr 1fr;
+            gap: 15px;
+        }
+
+        .publish-btn {
+            width: 100%;
+            padding: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .publish-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
+        }
+
+        .publish-btn:active {
+            transform: translateY(0);
+        }
+
+        .publish-btn:disabled {
+            background: #95a5a6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status {
+            margin-top: 20px;
+            padding: 12px 16px;
+            border-radius: 8px;
+            font-weight: 500;
+            text-align: center;
+            display: none;
+        }
+
+        .status.success {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+
+        .status.info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+
+        @media (max-width: 600px) {
+            .container {
+                padding: 25px;
+                margin: 10px;
+            }
+
+            .broker-grid {
+                grid-template-columns: 1fr;
+            }
+
+            h1 {
+                font-size: 1.5rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SplashFlag</h1>
+        <p style="text-align: center; color: #667eea; font-size: 1.1rem; margin-bottom: 30px; font-weight: 500;">Let's go swimming!</p>
+        
+        <form id="mqttForm">
+            <div class="form-group">
+                <label for="startTime">Start Time:</label>
+                <input type="datetime-local" id="startTime" required>
+            </div>
+
+            <div class="form-group">
+                <label for="endTime">End Time:</label>
+                <input type="datetime-local" id="endTime" required>
+            </div>
+
+            <div class="form-group">
+                <label for="message">Message:</label>
+                <textarea id="message" required></textarea>
+            </div>
+
+            <button type="submit" class="publish-btn" id="publishBtn">Publish Message</button>
+        </form>
+
+        <div id="status" class="status"></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script src="secrets.js"></script>
+    <script>
+        class MQTTPublisher {
+            constructor() {
+                this.client = null;
+                this.initializeForm();
+                this.setupEventListeners();
+            }
+
+            initializeForm() {
+                const now = new Date();
+                const oneHourLater = new Date(now.getTime() + 60 * 60 * 1000);
+                
+                // Format datetime for input fields
+                const startTime = this.formatDateTimeLocal(now);
+                const endTime = this.formatDateTimeLocal(oneHourLater);
+                
+                document.getElementById('startTime').value = startTime;
+                document.getElementById('endTime').value = endTime;
+                
+                this.updateMessage();
+            }
+
+            formatDateTimeLocal(date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                
+                return `${year}-${month}-${day}T${hours}:${minutes}`;
+            }
+
+            formatDisplayTime(dateTimeString) {
+                const date = new Date(dateTimeString);
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+		return `${hours}:${minutes}`;
+            }
+
+            updateMessage() {
+                const startTime = document.getElementById('startTime').value;
+                const endTime = document.getElementById('endTime').value;
+                
+                if (startTime && endTime) {
+                    const startDisplay = this.formatDisplayTime(startTime);
+                    const endDisplay = this.formatDisplayTime(endTime);
+                    const message = `We're swimming from ${startDisplay} until ${endDisplay}. Come swim!`;
+                    document.getElementById('message').value = message;
+                }
+            }
+
+            setupEventListeners() {
+                document.getElementById('startTime').addEventListener('change', () => {
+                    this.updateMessage();
+                });
+
+                document.getElementById('endTime').addEventListener('change', () => {
+                    this.updateMessage();
+                });
+
+                document.getElementById('mqttForm').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    this.publishMessage();
+                });
+            }
+
+            showStatus(message, type = 'info') {
+                const statusEl = document.getElementById('status');
+                statusEl.textContent = message;
+                statusEl.className = `status ${type}`;
+                statusEl.style.display = 'block';
+                
+                setTimeout(() => {
+                    statusEl.style.display = 'none';
+                }, 5000);
+            }
+
+            async publishMessage() {
+                const publishBtn = document.getElementById('publishBtn');
+                publishBtn.disabled = true;
+                publishBtn.textContent = 'Connecting...';
+
+                try {
+                    // Try without port first, then with custom headers for basic auth
+                    const brokerUrl = window.SECRETS.MQTT_SERVER_URL;
+                    const topic = 'splashflag/all';
+                    const username = window.SECRETS.MQTT_AUTH_USERNAME;
+                    const password = window.SECRETS.MQTT_AUTH_PASSWORD;
+                    
+                    // Create basic auth header
+                    const basicAuthHeader = 'Basic ' + btoa(window.SECRETS.BASIC_AUTH_USERNAME+':'+window.SECRETS.BASIC_AUTH_PASSWORD);
+                    
+                    const message = document.getElementById('message').value;
+                    const startTime = document.getElementById('startTime').value;
+                    const endTime = document.getElementById('endTime').value;
+
+                    this.showStatus('Connecting to MQTT broker...', 'info');
+
+                    // Create MQTT client with custom headers for basic auth
+                    this.client = mqtt.connect(brokerUrl, {
+                        connectTimeout: 10000,
+                        reconnectPeriod: 0,
+                        username: username,
+                        password: password,
+                        clientId: 'splashflag_' + Math.random().toString(16).substr(2, 8),
+                        clean: true,
+                        keepalive: 60,
+                        wsOptions: {
+                            headers: {
+                                'Authorization': basicAuthHeader
+                            }
+                        }
+                    });
+
+                    this.client.on('connect', () => {
+                        this.showStatus('Connected! Publishing message...', 'info');
+                        
+                        const payload = {
+                            current_time: startTime+':00',
+                            expiration_time: endTime+':00',
+                            message: message
+                        };
+
+                        this.client.publish(topic, JSON.stringify(payload), { qos: 1 }, (err) => {
+                            if (err) {
+                                this.showStatus(`Publish failed: ${err.message}`, 'error');
+                            } else {
+                                this.showStatus('Message published successfully!', 'success');
+                            }
+                            
+                            this.client.end();
+                            publishBtn.disabled = false;
+                            publishBtn.textContent = 'Publish Message';
+                        });
+                    });
+
+                    this.client.on('error', (err) => {
+                        this.showStatus(`Connection failed: ${err.message}`, 'error');
+                        publishBtn.disabled = false;
+                        publishBtn.textContent = 'Publish Message';
+                    });
+
+                    this.client.on('offline', () => {
+                        this.showStatus('Broker connection lost', 'error');
+                        publishBtn.disabled = false;
+                        publishBtn.textContent = 'Publish Message';
+                    });
+
+                } catch (error) {
+                    this.showStatus(`Error: ${error.message}`, 'error');
+                    publishBtn.disabled = false;
+                    publishBtn.textContent = 'Publish Message';
+                }
+            }
+        }
+
+        // Initialize the app when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            new MQTTPublisher();
+        });
+    </script>
+</body>
+</html>
