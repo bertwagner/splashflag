@@ -400,6 +400,9 @@
                     const username = window.SECRETS.MQTT_AUTH_USERNAME;
                     const password = window.SECRETS.MQTT_AUTH_PASSWORD;
                     
+                    // Create basic auth header
+                    const basicAuthHeader = 'Basic ' + btoa(window.SECRETS.BASIC_AUTH_USERNAME+':'+window.SECRETS.BASIC_AUTH_PASSWORD);
+                    
                     const message = document.getElementById('message').value;
                     const startTime = document.getElementById('startTime').value;
                     const endTime = document.getElementById('endTime').value;
@@ -414,7 +417,12 @@
                         password: password,
                         clientId: 'splashflag_' + Math.random().toString(16).substr(2, 8),
                         clean: true,
-                        keepalive: 60
+                        keepalive: 60,
+                        wsOptions: {
+                            headers: {
+                                'Authorization': basicAuthHeader
+                            }
+                        }
                     });
 
                     this.client.on('connect', () => {
