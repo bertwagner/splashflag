@@ -8,6 +8,7 @@
 #include <WebSocketsClient.h>  // include before MQTTPubSubClient.h
 #include <MQTTPubSubClient.h>
 #include <ArduinoJson.h>
+#include <base64.h>
 
 Lcd lcd(0x27, 16, 2);
 ServoFlag servoFlag(9);
@@ -26,7 +27,15 @@ void connect() {
 connect_to_host:
     Serial.println("connecting to host...");
     client.disconnect();
-    client.begin(MQTT_BROKER_URL, 80, "/", "mqtt"); 
+
+	// Create base64 encoded credentials
+    String credentials = HTTP_USERNAME ":" HTTP_PASSWORD;
+    String auth = "Basic " + base64::encode(credentials);
+    
+    // Set custom headers
+    client.setExtraHeaders(("Authorization: " + auth).c_str());
+
+    client.begin(MQTT_BROKER_URL, 80, "/", "mqtt");
 	// can use port 443 and .beginSSL(), but need to set up root certs on arduino
     client.setReconnectInterval(2000);
 
@@ -41,6 +50,7 @@ connect_to_host:
         }
     }
     Serial.println(" connected!");
+	// TODO: Only show message if doesn't connect 10 times?
 	lcd.write("Connected!");
 	lcd.turnOff();
 }
@@ -54,8 +64,8 @@ void factoryReset() {
 void setup() {
 	Serial.begin(115200);
 	// Wait for the Serial object to become available.
-	while (!Serial)
-		;
+	// while (!Serial)
+	// 	;
 
 	// Reset button
 	pinMode(4, INPUT);
@@ -132,7 +142,7 @@ void loop() {
 		mqtt.subscribe("splashflag/all", [](const String& payload, const size_t size) {
 			// Max message length is ~490 characters
 			//Serial.print("splashflag/all received: ");
-			//Serial.println(payload);
+			Serial.println(payload);
 			JsonDocument doc;
 			DeserializationError error = deserializeJson(doc, payload);
 			if (error) {
@@ -150,7 +160,7 @@ void loop() {
 			auto parseDateTime = [](const char* datetime) -> time_t {
 				struct tm tm;
 				memset(&tm, 0, sizeof(tm));
-				sscanf(datetime, "%d-%d-%d %d:%d:%d",
+				sscanf(datetime, "%d-%d-%dT%d:%d:%d",
 					&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
 					&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
 				tm.tm_year -= 1900;
