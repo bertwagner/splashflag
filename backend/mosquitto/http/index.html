@@ -96,6 +96,72 @@
             gap: 15px;
         }
 
+        .debug-toggle {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: rgba(255, 193, 7, 0.1);
+            border: 1px solid rgba(255, 193, 7, 0.3);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 25px;
+        }
+
+        .debug-toggle label {
+            margin: 0;
+            color: #856404;
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            cursor: pointer;
+        }
+
+        .debug-toggle .toggle-switch {
+            position: relative;
+            width: 50px;
+            height: 24px;
+            background: #ddd;
+            border-radius: 12px;
+            transition: background 0.3s ease;
+            cursor: pointer;
+        }
+
+        .debug-toggle .toggle-switch::before {
+            content: '';
+            position: absolute;
+            top: 2px;
+            left: 2px;
+            width: 20px;
+            height: 20px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .debug-toggle input[type="checkbox"] {
+            display: none;
+        }
+
+        .debug-toggle input[type="checkbox"]:checked + .toggle-switch {
+            background: #ffc107;
+        }
+
+        .debug-toggle input[type="checkbox"]:checked + .toggle-switch::before {
+            transform: translateX(26px);
+        }
+
+        .topic-display {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-top: 5px;
+            font-family: 'Courier New', monospace;
+            background: rgba(108, 117, 125, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            display: inline-block;
+        }
+
         .publish-btn {
             width: 100%;
             padding: 15px;
@@ -124,6 +190,14 @@
             background: #95a5a6;
             cursor: not-allowed;
             transform: none;
+        }
+
+        .publish-btn.debug-mode {
+            background: linear-gradient(135deg, #ffc107 0%, #ff8c00 100%);
+        }
+
+        .publish-btn.debug-mode:hover {
+            box-shadow: 0 10px 20px rgba(255, 193, 7, 0.3);
         }
 
         .status {
@@ -166,6 +240,12 @@
             h1 {
                 font-size: 1.5rem;
             }
+
+            .debug-toggle {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 10px;
+            }
         }
     </style>
 </head>
@@ -175,6 +255,17 @@
         <p style="text-align: center; color: #667eea; font-size: 1.1rem; margin-bottom: 30px; font-weight: 500;">Let's go swimming!</p>
         
         <form id="mqttForm">
+            <div class="debug-toggle">
+                <label for="debugMode">
+                    🐛 Debug Mode
+                </label>
+                <label for="debugMode" style="cursor: pointer;">
+                    <input type="checkbox" id="debugMode">
+                    <div class="toggle-switch"></div>
+                </label>
+            </div>
+            <div class="topic-display" id="topicDisplay">Topic: splashflag/all</div>
+
             <div class="form-group">
                 <label for="startTime">Start Time:</label>
                 <input type="datetime-local" id="startTime" required>
@@ -218,6 +309,7 @@
                 document.getElementById('endTime').value = endTime;
                 
                 this.updateMessage();
+                this.updateTopicDisplay();
             }
 
             formatDateTimeLocal(date) {
@@ -234,7 +326,7 @@
                 const date = new Date(dateTimeString);
                 const hours = String(date.getHours()).padStart(2, '0');
                 const minutes = String(date.getMinutes()).padStart(2, '0');
-		return `${hours}:${minutes}`;
+                return `${hours}:${minutes}`;
             }
 
             updateMessage() {
@@ -249,6 +341,22 @@
                 }
             }
 
+            updateTopicDisplay() {
+                const isDebugMode = document.getElementById('debugMode').checked;
+                const topic = isDebugMode ? 'splashflag/debug' : 'splashflag/all';
+                const publishBtn = document.getElementById('publishBtn');
+                
+                document.getElementById('topicDisplay').textContent = `Topic: ${topic}`;
+                
+                if (isDebugMode) {
+                    publishBtn.classList.add('debug-mode');
+                    publishBtn.textContent = 'Publish Debug Message';
+                } else {
+                    publishBtn.classList.remove('debug-mode');
+                    publishBtn.textContent = 'Publish Message';
+                }
+            }
+
             setupEventListeners() {
                 document.getElementById('startTime').addEventListener('change', () => {
                     this.updateMessage();
@@ -256,6 +364,10 @@
 
                 document.getElementById('endTime').addEventListener('change', () => {
                     this.updateMessage();
+                });
+
+                document.getElementById('debugMode').addEventListener('change', () => {
+                    this.updateTopicDisplay();
                 });
 
                 document.getElementById('mqttForm').addEventListener('submit', (e) => {
@@ -277,24 +389,22 @@
 
             async publishMessage() {
                 const publishBtn = document.getElementById('publishBtn');
+                const isDebugMode = document.getElementById('debugMode').checked;
+                
                 publishBtn.disabled = true;
-                publishBtn.textContent = 'Connecting...';
+                publishBtn.textContent = isDebugMode ? 'Publishing Debug...' : 'Publishing...';
 
                 try {
-                    // Try without port first, then with custom headers for basic auth
                     const brokerUrl = window.SECRETS.MQTT_SERVER_URL;
-                    const topic = 'splashflag/all';
+                    const topic = isDebugMode ? 'splashflag/debug' : 'splashflag/all';
                     const username = window.SECRETS.MQTT_AUTH_USERNAME;
                     const password = window.SECRETS.MQTT_AUTH_PASSWORD;
-                    
-                    // Create basic auth header
-                    const basicAuthHeader = 'Basic ' + btoa(window.SECRETS.BASIC_AUTH_USERNAME+':'+window.SECRETS.BASIC_AUTH_PASSWORD);
                     
                     const message = document.getElementById('message').value;
                     const startTime = document.getElementById('startTime').value;
                     const endTime = document.getElementById('endTime').value;
 
-                    this.showStatus('Connecting to MQTT broker...', 'info');
+                    this.showStatus(`Connecting to MQTT broker... (${isDebugMode ? 'Debug' : 'Production'} mode)`, 'info');
 
                     // Create MQTT client with custom headers for basic auth
                     this.client = mqtt.connect(brokerUrl, {
@@ -304,16 +414,12 @@
                         password: password,
                         clientId: 'splashflag_' + Math.random().toString(16).substr(2, 8),
                         clean: true,
-                        keepalive: 60,
-                        wsOptions: {
-                            headers: {
-                                'Authorization': basicAuthHeader
-                            }
-                        }
+                        keepalive: 60
                     });
 
                     this.client.on('connect', () => {
-                        this.showStatus('Connected! Publishing message...', 'info');
+                        const modeText = isDebugMode ? 'debug' : 'production';
+                        this.showStatus(`Connected! Publishing ${modeText} message...`, 'info');
                         
                         const payload = {
                             current_time: startTime+':00',
@@ -325,31 +431,33 @@
                             if (err) {
                                 this.showStatus(`Publish failed: ${err.message}`, 'error');
                             } else {
-                                this.showStatus('Message published successfully!', 'success');
+                                const modeText = isDebugMode ? 'debug' : 'production';
+                                this.showStatus(`${modeText} message published successfully to ${topic}!`, 'success');
                             }
                             
                             this.client.end();
                             publishBtn.disabled = false;
-                            publishBtn.textContent = 'Publish Message';
+                            publishBtn.textContent = isDebugMode ? 'Publish Debug Message' : 'Publish Message';
                         });
                     });
 
                     this.client.on('error', (err) => {
                         this.showStatus(`Connection failed: ${err.message}`, 'error');
                         publishBtn.disabled = false;
-                        publishBtn.textContent = 'Publish Message';
+                        publishBtn.textContent = isDebugMode ? 'Publish Debug Message' : 'Publish Message';
                     });
 
                     this.client.on('offline', () => {
                         this.showStatus('Broker connection lost', 'error');
                         publishBtn.disabled = false;
-                        publishBtn.textContent = 'Publish Message';
+                        publishBtn.textContent = isDebugMode ? 'Publish Debug Message' : 'Publish Message';
                     });
 
                 } catch (error) {
                     this.showStatus(`Error: ${error.message}`, 'error');
                     publishBtn.disabled = false;
-                    publishBtn.textContent = 'Publish Message';
+                    const isDebugMode = document.getElementById('debugMode').checked;
+                    publishBtn.textContent = isDebugMode ? 'Publish Debug Message' : 'Publish Message';
                 }
             }
         }
