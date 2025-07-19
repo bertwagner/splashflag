@@ -33,22 +33,22 @@ mqttc.user_data_set(unacked_publish)
 mqttc.username_pw_set(os.environ.get("MOSQUITTO_USERNAME"),os.environ.get("MOSQUITTO_PASSWORD"))
 
 
-# HTTP Basic Auth credentials for nginx
-http_username = os.environ.get("NGINX_BASIC_AUTH_USERNAME")
-http_password = os.environ.get("NGINX_BASIC_AUTH_PASSWORD")
+# # HTTP Basic Auth credentials for nginx
+# http_username = os.environ.get("NGINX_BASIC_AUTH_USERNAME")
+# http_password = os.environ.get("NGINX_BASIC_AUTH_PASSWORD")
 
-# Create Authorization header for HTTP basic auth
-auth_string = f"{http_username}:{http_password}"
-auth_bytes = auth_string.encode('ascii')
-auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
+# # Create Authorization header for HTTP basic auth
+# auth_string = f"{http_username}:{http_password}"
+# auth_bytes = auth_string.encode('ascii')
+# auth_b64 = base64.b64encode(auth_bytes).decode('ascii')
 
-# Set custom headers for HTTP basic auth
-headers = {
-    "Authorization": f"Basic {auth_b64}"
-}
+# # Set custom headers for HTTP basic auth
+# headers = {
+#     "Authorization": f"Basic {auth_b64}"
+# }
 
-# Set WebSocket options with authentication headers
-mqttc.ws_set_options(path="/", headers=headers)
+# # Set WebSocket options with authentication headers
+# mqttc.ws_set_options(path="/", headers=headers)
 
 
 
