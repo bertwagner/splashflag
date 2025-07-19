@@ -1,7 +1,0 @@
-window.SECRETS = {
- MQTT_SERVER_URL: 'wss://<url goes here>',
- MQTT_AUTH_USERNAME: '',
- MQTT_AUTH_PASSWORD: '',
- BASIC_AUTH_USERNAME: '',
- BASIC_AUTH_PASSWORD: ''
-}
