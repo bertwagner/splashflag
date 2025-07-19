@@ -2,6 +2,7 @@ services:
   mosquitto:
     container_name: mosquitto
     image: eclipse-mosquitto:latest
+    user: "101:101"
     networks: 
       - app-network
     ports:
