@@ -9,6 +9,7 @@
 #include <MQTTPubSubClient.h>
 #include <ArduinoJson.h>
 #include <base64.h>
+#include <pthread.h>
 
 Lcd lcd(0x27, 16, 2);
 ServoFlag servoFlag(9);
@@ -17,8 +18,13 @@ CaptivePortal portal(credentialManager, lcd);
 
 int resetButtonState = 0;
 bool mqttInitialized = false;
+
 unsigned long flagUpSecondsEndTime = 0;
 const char* message;
+pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
+static unsigned long resetButtonPressedTime = 0;
+static bool buttonWasPressed = false;
 
 WebSocketsClient client;
 MQTTPubSub::PubSubClient<512> mqtt;
@@ -27,13 +33,6 @@ void connect() {
 connect_to_host:
     Serial.println("connecting to host...");
     client.disconnect();
-
-	// // Create base64 encoded credentials
-    // String credentials = HTTP_USERNAME ":" HTTP_PASSWORD;
-    // String auth = "Basic " + base64::encode(credentials);
-    
-    // // Set custom headers
-    // client.setExtraHeaders(("Authorization: " + auth).c_str());
 
     client.begin(MQTT_BROKER_URL, 80, "/", "mqtt");
 	// can use port 443 and .beginSSL(), but need to set up root certs on arduino
@@ -51,14 +50,38 @@ connect_to_host:
     }
     Serial.println(" connected!");
 	// TODO: Only show message if doesn't connect 10 times?
-	lcd.write("Connected!");
-	lcd.turnOff();
+	//lcd.write("Connected!");
+	//lcd.turnOff();
 }
 
 void factoryReset() {
 	Serial.printf("FACTORY RESET");
 	lcd.write("RESETTING TO FACTORY SETTINGS");
 	credentialManager.saveCredentials("","");
+}
+
+void* display_thread(void* arg) {
+	char* local_message;
+	long local_flagUpSecondsEndTime;
+
+	while (true) {
+		pthread_mutex_lock(&mutex);
+		local_message = (char*) message;
+		local_flagUpSecondsEndTime = flagUpSecondsEndTime;
+		pthread_mutex_unlock(&mutex);
+
+		if ((millis()/1000) < flagUpSecondsEndTime){
+			servoFlag.moveTo(90);
+			lcd.write(message);
+		} else {
+			servoFlag.moveTo(0);
+			flagUpSecondsEndTime = 0; 
+			lcd.turnOff();
+		}
+	}
+
+	
+	return NULL;
 }
 
 void setup() {
@@ -114,13 +137,16 @@ void setup() {
 			lcd.turnOff();
 			servoFlag.init();
 		} else {
-			Serial.println("\nFailed to connect to WiFi. Resetting credentials.");
+			Serial.println("\nFailed to connect to WiFi.");
 			lcd.write("Wifi connection failed. Check your wifi connection. If problem persists, hold factory reset button for 10 seconds and re-enter Wifi password.");
 			esp_restart();
 		}
 	}
 
 	
+	 pthread_t reader_tid;
+	 pthread_create(&reader_tid, NULL, display_thread, NULL);
+
 }
 
 void loop() {
@@ -152,6 +178,7 @@ void loop() {
 			}
 
 			// Extract values from the JSON document
+			pthread_mutex_lock(&mutex);
 			message = doc["message"];
 			const char* current_time = doc["current_time"];
 			const char* expiration_time = doc["expiration_time"];
@@ -172,6 +199,7 @@ void loop() {
 			time_t expirationTime = parseDateTime(expiration_time);
 			unsigned long flagUpDurationSeconds = expirationTime - currentTime;
 			flagUpSecondsEndTime = (millis() / 1000) + flagUpDurationSeconds;
+			pthread_mutex_unlock(&mutex);
 		});
 
 		// TODO: refactor this duplicate function
@@ -188,6 +216,7 @@ void loop() {
 			}
 
 			// Extract values from the JSON document
+			pthread_mutex_lock(&mutex);
 			message = doc["message"];
 			const char* current_time = doc["current_time"];
 			const char* expiration_time = doc["expiration_time"];
@@ -208,6 +237,7 @@ void loop() {
 			time_t expirationTime = parseDateTime(expiration_time);
 			unsigned long flagUpDurationSeconds = expirationTime - currentTime;
 			flagUpSecondsEndTime = (millis() / 1000) + flagUpDurationSeconds;
+			pthread_mutex_unlock(&mutex);
 		});
 
 		mqttInitialized = true;
@@ -215,7 +245,6 @@ void loop() {
 
 	}
 	if (!mqtt.isConnected()) {
-		//connect();
 		mqttInitialized = false;
 	} else {
 		mqtt.update();  // should be called
@@ -229,42 +258,54 @@ void loop() {
 
   
 
-	// TODO: Refactor everything
-	// TODO: Keep message displayed for duration of flag up
+	// // TODO: Refactor everything
+	// // TODO: Keep message displayed for duration of flag up
 
-	if ((millis()/1000) < flagUpSecondsEndTime){
-		servoFlag.moveTo(90);
-		lcd.write(message);
-	} else {
-		servoFlag.moveTo(0);
-		flagUpSecondsEndTime = 0; 
-		lcd.turnOff();
-	}
+	// if ((millis()/1000) < flagUpSecondsEndTime){
+	// 	servoFlag.moveTo(90);
+	// 	lcd.write(message);
+	// } else {
+	// 	servoFlag.moveTo(0);
+	// 	flagUpSecondsEndTime = 0; 
+	// 	lcd.turnOff();
+	// }
 	
 
-
-	// Reset if reset button has been held for 10 seconds
+	// Clear message if reset button pressed quickly
+	// Reset device if reset button has been held for 10 seconds
+	
 	resetButtonState = digitalRead(4);
-	//Serial.printf("Reset button state: %d\n", resetButtonState);
-	static unsigned long resetButtonPressedTime = 0;
-	static bool resetInProgress = false;
 
-	if (resetButtonState == HIGH) {
-		if (!resetInProgress) {
-			resetButtonPressedTime = millis();
-			resetInProgress = true;
-		} else if (millis() - resetButtonPressedTime >= 10000) {
+	if (resetButtonState == HIGH && !buttonWasPressed) {
+		// Button just pressed
+		resetButtonPressedTime = millis();
+		buttonWasPressed = true;
+	}
+
+	if (resetButtonState == HIGH && buttonWasPressed) {
+		// Button is still pressed
+		unsigned long heldTime = millis() - resetButtonPressedTime;
+		if (heldTime >= 10000) {
+			// Button has been held for 10 seconds, factory reset
 			factoryReset();
 			servoFlag.moveTo(0);
 			esp_restart();
 			Serial.printf("RESETTING\n");
+		} else if (heldTime > 100) {
+			// Button pressed for less than 10 seconds, reset the status
+			pthread_mutex_lock(&mutex);
+			flagUpSecondsEndTime = 0;
+			pthread_mutex_unlock(&mutex);
+			Serial.printf("Reset button pressed for less than 10 seconds but more than 2 seconds, resetting flag up status.\n");
+			delay(1000);
 		}
-	} else {
-		resetInProgress = false;
+		
 	}
-	delay(500);
-	// Serial.printf("Reset button held for: %d\n", millis() - resetButtonPressedTime);
 
+	if (resetButtonState == LOW) {
+		buttonWasPressed = false;
+	}
+	
 }
 
 
