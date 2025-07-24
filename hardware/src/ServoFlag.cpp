@@ -11,12 +11,12 @@ void ServoFlag::init()
 {
     _servo1.attach(_pin);
     moveTo(0);
+    _servo_initialized = true;
 }
 
 void ServoFlag::moveTo(int degrees) 
 {
-    //Serial.printf("Moving to %d\n", degrees);
-    if (degrees == _currentPositionDegrees) {
+    if (_servo_initialized && degrees == _currentPositionDegrees) {
         return;
     } else {
         _currentPositionDegrees = degrees;

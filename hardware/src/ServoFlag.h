@@ -13,4 +13,5 @@ class ServoFlag {
         Servo _servo1; 
         int _pin;
         int _currentPositionDegrees = 0;
+        bool _servo_initialized = false;
 };

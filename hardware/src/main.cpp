@@ -103,7 +103,6 @@ void setup() {
 	delay(100);
 
 
-	// TODO: Servo isn't going back to 0 after restart? might be this line or another one below.
 	servoFlag.init();
 	lcd.init();
 	lcd.write("Welcome to SplashFlag!");
