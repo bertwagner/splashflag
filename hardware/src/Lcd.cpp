@@ -22,6 +22,21 @@ void Lcd::init()
     pthread_mutex_unlock(&_lcd_mutex);        
 }
 
+void Lcd::displayScreen(const LCDScreen& screen) {
+    pthread_mutex_lock(&_lcd_mutex);
+    _lcd.backlight();
+    _lcd.clear();
+    _lcd.setCursor(0,0);
+    _lcd.print(screen.line1);
+    _lcd.setCursor(0,1);
+    _lcd.print(screen.line2);
+    pthread_mutex_unlock(&_lcd_mutex);
+}
+
+void Lcd::formatForLcd(const char *message, int *screen_count, LCDScreen (*screens)[50]) {
+    _format_for_lcd(message, screen_count, screens);
+}
+
 void Lcd::write(const char *message, int scrollRepeat)
 {
     pthread_mutex_lock(&_lcd_mutex);

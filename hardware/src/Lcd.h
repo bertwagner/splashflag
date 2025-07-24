@@ -25,6 +25,8 @@ class Lcd {
         void write(const char *message, int scrollRepeat = 1);
 
         void turnOff();
+        void displayScreen(const LCDScreen& screen);
+        void formatForLcd(const char *message, int *screen_count, LCDScreen (*screens)[50]);
 
     private:
         LiquidCrystal_I2C _lcd;

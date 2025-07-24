@@ -30,6 +30,13 @@ static bool buttonWasPressed = false;
 WebSocketsClient client;
 MQTTPubSub::PubSubClient<512> mqtt;
 
+bool shouldStopDisplaying() {
+    pthread_mutex_lock(&mutex);
+    bool stop = (flagUpSecondsEndTime == 0) || ((millis()/1000) >= flagUpSecondsEndTime);
+    pthread_mutex_unlock(&mutex);
+    return stop;
+}
+
 void connect() {
 connect_to_host:
     Serial.println("connecting to host...");
@@ -62,30 +69,69 @@ void factoryReset() {
 }
 
 void* display_thread(void* arg) {
-	char local_message[512];
-	long local_flagUpSecondsEndTime;
-	while (true) {
-		pthread_mutex_lock(&mutex);
-		strcpy(local_message, message);
-        local_flagUpSecondsEndTime = flagUpSecondsEndTime;
-		pthread_mutex_unlock(&mutex);
-
-		if ((millis()/1000) < flagUpSecondsEndTime){
-			pthread_mutex_lock(&mutex);
-			servoFlag.moveTo(90);
-			pthread_mutex_unlock(&mutex);
-			lcd.write(message);
-		} else {
-			pthread_mutex_lock(&mutex);
-			servoFlag.moveTo(0);
-			flagUpSecondsEndTime = 0; 
-			pthread_mutex_unlock(&mutex);
-			lcd.turnOff();
-		}
-	}
-
-	
-	return NULL;
+    char local_message[512] = "";
+    int screen_count = 0;
+    LCDScreen screens[50];
+    int current_screen = 0;
+    unsigned long last_screen_change = 0;
+    bool displaying = false;
+    bool screen_drawn = false;  // Track if current screen is already drawn
+    
+    while (true) {
+        // Check if we should stop displaying
+        if (shouldStopDisplaying()) {
+            if (displaying) {
+                pthread_mutex_lock(&mutex);
+                servoFlag.moveTo(0);
+                pthread_mutex_unlock(&mutex);
+                lcd.turnOff();
+                displaying = false;
+                screen_drawn = false;
+            }
+        } else {
+            // We should be displaying
+            pthread_mutex_lock(&mutex);
+            // Check if we got a new message or we're not currently displaying
+            if (!displaying || strcmp(local_message, message) != 0) {
+                strcpy(local_message, message);
+                pthread_mutex_unlock(&mutex);
+                
+                // Format message for LCD
+                lcd.formatForLcd(local_message, &screen_count, &screens);
+                current_screen = 0;
+                last_screen_change = millis();
+                displaying = true;
+                screen_drawn = false;  // Need to redraw new message
+                
+                pthread_mutex_lock(&mutex);
+                servoFlag.moveTo(90);
+                pthread_mutex_unlock(&mutex);
+            } else {
+                pthread_mutex_unlock(&mutex);
+            }
+            
+            if (displaying && screen_count > 0) {
+                // Only draw screen if we haven't drawn it yet
+                if (!screen_drawn) {
+                    lcd.displayScreen(screens[current_screen]);
+                    screen_drawn = true;
+                }
+                
+                // Check if it's time to move to next screen
+                if (millis() - last_screen_change >= SCROLL_DELAY) {
+                    current_screen++;
+                    if (current_screen >= screen_count) {
+                        current_screen = 0; // Loop back to first screen
+                    }
+                    last_screen_change = millis();
+                    screen_drawn = false;  // Need to draw the new screen
+                }
+            }
+        }
+        
+        delay(10); // Much faster checking, but only redraw when needed
+    }
+    return NULL;
 }
 
 void setup() {
@@ -265,26 +311,6 @@ void loop() {
 		mqtt.update();  // should be called
 	}
 
-	
-
-
-	
-
-
-  
-
-	// // TODO: Refactor everything
-	// // TODO: Keep message displayed for duration of flag up
-
-	// if ((millis()/1000) < flagUpSecondsEndTime){
-	// 	servoFlag.moveTo(90);
-	// 	lcd.write(message);
-	// } else {
-	// 	servoFlag.moveTo(0);
-	// 	flagUpSecondsEndTime = 0; 
-	// 	lcd.turnOff();
-	// }
-	
 
 	// Clear message if reset button pressed quickly
 	// Reset device if reset button has been held for 10 seconds
@@ -313,8 +339,7 @@ void loop() {
 			pthread_mutex_lock(&mutex);
 			flagUpSecondsEndTime = 0;
 			pthread_mutex_unlock(&mutex);
-			Serial.printf("Reset button pressed for less than 10 seconds but more than 2 seconds, resetting flag up status.\n");
-			delay(1000);
+			//Serial.printf("Reset button pressed for less than 10 seconds but more than 2 seconds, resetting flag up status.\n");
 		}
 		
 	}
