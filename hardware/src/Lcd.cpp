@@ -8,18 +8,72 @@ Lcd::Lcd(int address, int columns, int rows) : _lcd(address, columns, rows) //co
 {       
 }
 
-void Lcd::init()
-{
-    _lcd.init();
-    _lcd.clear();           
+Lcd::~Lcd() {
+    pthread_mutex_destroy(&_lcd_mutex);
 }
 
-void Lcd::write(const char *message, int scrollRepeat) 
+void Lcd::init()
+{
+    pthread_mutex_init(&_lcd_mutex, NULL);
+    
+    pthread_mutex_lock(&_lcd_mutex);
+    _lcd.init();
+    _lcd.clear();
+    pthread_mutex_unlock(&_lcd_mutex);        
+}
+
+void Lcd::write(const char *message, int scrollRepeat)
+{
+    pthread_mutex_lock(&_lcd_mutex);
+    _lcd.backlight(); 
+
+    int screen_count;
+    LCDScreen screens[50];
+    //Serial.printf("Preparing to display messag: %s\n", message);
+    _format_for_lcd(message, &screen_count, &screens);
+
+    //Serial.printf("Screen count: %d\n", screen_count);
+    //Serial.printf("screens0: %s\n", screens[0].line1);
+
+    for (int s = 0; s < scrollRepeat; s++) {
+        for (int i = 0; i < screen_count; i++) {
+        _lcd.clear(); 
+
+        _lcd.setCursor(0,0);
+        _lcd.print(screens[i].line1);
+
+        _lcd.setCursor(0,1);
+        _lcd.print(screens[i].line2);
+        
+        delay(SCROLL_DELAY);
+        }
+    }
+    pthread_mutex_unlock(&_lcd_mutex);
+
+}
+
+void Lcd::_format_for_lcd(const char *message, int *screen_count, LCDScreen (*screens)[50]) {
+    int text_len = strlen(message);
+    int pos = 0;
+    int screen_idx = 0;
+
+    while (pos < text_len) {
+
+      _add_line((*screens)[screen_idx].line1, message, &pos, text_len);
+      _add_line((*screens)[screen_idx].line2, message, &pos, text_len);
+      screen_idx++;
+  }
+
+  *screen_count = screen_idx;
+
+}
+
+void Lcd::write_old(const char *message, int scrollRepeat) 
 {
     _lcd.backlight(); 
 
     int screen_count;
-    LCDScreen *screens = _format_for_lcd(message, &screen_count);
+    LCDScreen *screens = _format_for_lcd_old(message, &screen_count);
 
     for (int s = 0; s < scrollRepeat; s++) {
         for (int i = 0; i < screen_count; i++) {
@@ -43,8 +97,10 @@ void Lcd::write(const char *message, int scrollRepeat)
 
 void Lcd::turnOff()
 {
+    pthread_mutex_lock(&_lcd_mutex);
     _lcd.clear();
     _lcd.noBacklight();
+    pthread_mutex_unlock(&_lcd_mutex);
 }
 
 void Lcd::_add_line(char *dest, const char *src, int *pos, int text_len) {
@@ -94,7 +150,7 @@ void Lcd::_add_line(char *dest, const char *src, int *pos, int text_len) {
   }
 }
 
-LCDScreen* Lcd::_format_for_lcd(const char *text, int *screen_count) {
+LCDScreen* Lcd::_format_for_lcd_old(const char *text, int *screen_count) {
   int text_len = strlen(text);
   int pos = 0;
   int capacity = 4;
@@ -118,3 +174,5 @@ LCDScreen* Lcd::_format_for_lcd(const char *text, int *screen_count) {
   *screen_count = screen_idx;
   return screens;
 }
+
+

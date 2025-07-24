@@ -20,8 +20,9 @@ int resetButtonState = 0;
 bool mqttInitialized = false;
 
 unsigned long flagUpSecondsEndTime = 0;
-const char* message;
+char message[512];
 pthread_mutex_t mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 static unsigned long resetButtonPressedTime = 0;
 static bool buttonWasPressed = false;
@@ -61,13 +62,12 @@ void factoryReset() {
 }
 
 void* display_thread(void* arg) {
-	char* local_message;
+	char local_message[512];
 	long local_flagUpSecondsEndTime;
-
 	while (true) {
 		pthread_mutex_lock(&mutex);
-		local_message = (char*) message;
-		local_flagUpSecondsEndTime = flagUpSecondsEndTime;
+		strcpy(local_message, message);
+        local_flagUpSecondsEndTime = flagUpSecondsEndTime;
 		pthread_mutex_unlock(&mutex);
 
 		if ((millis()/1000) < flagUpSecondsEndTime){
@@ -99,10 +99,10 @@ void setup() {
 	delay(100);
 
 
+	// TODO: Servo isn't going back to 0 after restart? might be this line or another one below.
 	servoFlag.init();
 	lcd.init();
 	lcd.write("Welcome to SplashFlag!");
-
 	
 	//Check if credentials exist
 	auto [ssid,password] = credentialManager.retrieveCredentials();
@@ -144,8 +144,12 @@ void setup() {
 	}
 
 	
-	 pthread_t reader_tid;
-	 pthread_create(&reader_tid, NULL, display_thread, NULL);
+	pthread_t reader_tid;
+	pthread_attr_t attr;
+	pthread_attr_init(&attr);
+	pthread_attr_setstacksize(&attr, 8192); // Increase from default ~2KB to 8KB
+	pthread_create(&reader_tid, &attr, display_thread, NULL);
+	pthread_attr_destroy(&attr);
 
 }
 
@@ -179,9 +183,14 @@ void loop() {
 
 			// Extract values from the JSON document
 			pthread_mutex_lock(&mutex);
-			message = doc["message"];
+			strncpy(message, doc["message"], sizeof(message) - 1);
+			message[sizeof(message) - 1] = '\0';
+
 			const char* current_time = doc["current_time"];
 			const char* expiration_time = doc["expiration_time"];
+			// Serial.printf("Message: %s\n", message);
+			// Serial.printf("Current Time: %s\n", current_time);
+			// Serial.printf("Expiration Time: %s\n", expiration_time);
 
 			// Helper function to parse "YYYY-MM-DD HH:MM:SS" to time_t
 			auto parseDateTime = [](const char* datetime) -> time_t {
@@ -199,6 +208,8 @@ void loop() {
 			time_t expirationTime = parseDateTime(expiration_time);
 			unsigned long flagUpDurationSeconds = expirationTime - currentTime;
 			flagUpSecondsEndTime = (millis() / 1000) + flagUpDurationSeconds;
+			//Serial.printf("Flag up Seconds Duration: %d\n", flagUpDurationSeconds);
+			//Serial.printf("Flag up Seconds EndTime: %d\n", flagUpSecondsEndTime);
 			pthread_mutex_unlock(&mutex);
 		});
 
@@ -217,7 +228,8 @@ void loop() {
 
 			// Extract values from the JSON document
 			pthread_mutex_lock(&mutex);
-			message = doc["message"];
+			strncpy(message, doc["message"], sizeof(message) - 1);
+			message[sizeof(message) - 1] = '\0';
 			const char* current_time = doc["current_time"];
 			const char* expiration_time = doc["expiration_time"];
 
