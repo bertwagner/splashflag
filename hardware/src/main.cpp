@@ -71,11 +71,15 @@ void* display_thread(void* arg) {
 		pthread_mutex_unlock(&mutex);
 
 		if ((millis()/1000) < flagUpSecondsEndTime){
+			pthread_mutex_lock(&mutex);
 			servoFlag.moveTo(90);
+			pthread_mutex_unlock(&mutex);
 			lcd.write(message);
 		} else {
+			pthread_mutex_lock(&mutex);
 			servoFlag.moveTo(0);
 			flagUpSecondsEndTime = 0; 
+			pthread_mutex_unlock(&mutex);
 			lcd.turnOff();
 		}
 	}
@@ -300,7 +304,9 @@ void loop() {
 		if (heldTime >= 10000) {
 			// Button has been held for 10 seconds, factory reset
 			factoryReset();
+			pthread_mutex_lock(&mutex);
 			servoFlag.moveTo(0);
+			pthread_mutex_unlock(&mutex);
 			esp_restart();
 			Serial.printf("RESETTING\n");
 		} else if (heldTime > 100) {
