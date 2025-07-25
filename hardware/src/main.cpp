@@ -134,6 +134,51 @@ void* display_thread(void* arg) {
     return NULL;
 }
 
+void handleMqttMessage(const char* topic, const String& payload, const size_t size) {
+    // Max message length is ~490 characters
+	//Serial.print("splashflag/all received: ");
+	Serial.println(payload);
+	JsonDocument doc;
+	DeserializationError error = deserializeJson(doc, payload);
+	if (error) {
+		Serial.print("deserializeJson() failed: ");
+		Serial.println(error.c_str());
+		return;
+	}
+
+	// Extract values from the JSON document
+	pthread_mutex_lock(&mutex);
+	if (strcmp(topic, "debug") == 0) {
+		snprintf(message, sizeof(message), "DEBUG: %s", doc["message"].as<const char*>());
+	} else {
+		strncpy(message, doc["message"], sizeof(message) - 1);
+	}
+	message[sizeof(message) - 1] = '\0';
+
+	const char* current_time = doc["current_time"];
+	const char* expiration_time = doc["expiration_time"];
+
+	// Helper function to parse "YYYY-MM-DD HH:MM:SS" to time_t
+	auto parseDateTime = [](const char* datetime) -> time_t {
+		struct tm tm;
+		memset(&tm, 0, sizeof(tm));
+		sscanf(datetime, "%d-%d-%dT%d:%d:%d",
+			&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
+			&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
+		tm.tm_year -= 1900;
+		tm.tm_mon -= 1;
+		return mktime(&tm);
+	};
+
+	time_t currentTime = parseDateTime(current_time);
+	time_t expirationTime = parseDateTime(expiration_time);
+	unsigned long flagUpDurationSeconds = expirationTime - currentTime;
+	flagUpSecondsEndTime = (millis() / 1000) + flagUpDurationSeconds;
+	//Serial.printf("Flag up Seconds Duration: %d\n", flagUpDurationSeconds);
+	//Serial.printf("Flag up Seconds EndTime: %d\n", flagUpSecondsEndTime);
+	pthread_mutex_unlock(&mutex);
+}
+
 void setup() {
 	Serial.begin(115200);
 	// Wait for the Serial object to become available.
@@ -219,92 +264,16 @@ void loop() {
 		connect();
 
 		mqtt.subscribe("splashflag/all", [](const String& payload, const size_t size) {
-			// Max message length is ~490 characters
-			//Serial.print("splashflag/all received: ");
-			Serial.println(payload);
-			JsonDocument doc;
-			DeserializationError error = deserializeJson(doc, payload);
-			if (error) {
-				Serial.print("deserializeJson() failed: ");
-				Serial.println(error.c_str());
-				return;
-			}
-
-			// Extract values from the JSON document
-			pthread_mutex_lock(&mutex);
-			strncpy(message, doc["message"], sizeof(message) - 1);
-			message[sizeof(message) - 1] = '\0';
-
-			const char* current_time = doc["current_time"];
-			const char* expiration_time = doc["expiration_time"];
-			// Serial.printf("Message: %s\n", message);
-			// Serial.printf("Current Time: %s\n", current_time);
-			// Serial.printf("Expiration Time: %s\n", expiration_time);
-
-			// Helper function to parse "YYYY-MM-DD HH:MM:SS" to time_t
-			auto parseDateTime = [](const char* datetime) -> time_t {
-				struct tm tm;
-				memset(&tm, 0, sizeof(tm));
-				sscanf(datetime, "%d-%d-%dT%d:%d:%d",
-					&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
-					&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
-				tm.tm_year -= 1900;
-				tm.tm_mon -= 1;
-				return mktime(&tm);
-			};
-
-			time_t currentTime = parseDateTime(current_time);
-			time_t expirationTime = parseDateTime(expiration_time);
-			unsigned long flagUpDurationSeconds = expirationTime - currentTime;
-			flagUpSecondsEndTime = (millis() / 1000) + flagUpDurationSeconds;
-			//Serial.printf("Flag up Seconds Duration: %d\n", flagUpDurationSeconds);
-			//Serial.printf("Flag up Seconds EndTime: %d\n", flagUpSecondsEndTime);
-			pthread_mutex_unlock(&mutex);
+			handleMqttMessage("all", payload, size);
 		});
-
-		// TODO: refactor this duplicate function
 		mqtt.subscribe("splashflag/debug", [](const String& payload, const size_t size) {
-			// Max message length is ~490 characters
-			//Serial.print("splashflag/all received: ");
-			Serial.println(payload);
-			JsonDocument doc;
-			DeserializationError error = deserializeJson(doc, payload);
-			if (error) {
-				Serial.print("deserializeJson() failed: ");
-				Serial.println(error.c_str());
-				return;
-			}
-
-			// Extract values from the JSON document
-			pthread_mutex_lock(&mutex);
-			strncpy(message, doc["message"], sizeof(message) - 1);
-			message[sizeof(message) - 1] = '\0';
-			const char* current_time = doc["current_time"];
-			const char* expiration_time = doc["expiration_time"];
-
-			// Helper function to parse "YYYY-MM-DD HH:MM:SS" to time_t
-			auto parseDateTime = [](const char* datetime) -> time_t {
-				struct tm tm;
-				memset(&tm, 0, sizeof(tm));
-				sscanf(datetime, "%d-%d-%dT%d:%d:%d",
-					&tm.tm_year, &tm.tm_mon, &tm.tm_mday,
-					&tm.tm_hour, &tm.tm_min, &tm.tm_sec);
-				tm.tm_year -= 1900;
-				tm.tm_mon -= 1;
-				return mktime(&tm);
-			};
-
-			time_t currentTime = parseDateTime(current_time);
-			time_t expirationTime = parseDateTime(expiration_time);
-			unsigned long flagUpDurationSeconds = expirationTime - currentTime;
-			flagUpSecondsEndTime = (millis() / 1000) + flagUpDurationSeconds;
-			pthread_mutex_unlock(&mutex);
+			handleMqttMessage("debug", payload, size);
 		});
 
 		mqttInitialized = true;
 		Serial.println("MQTT client initialized.");
-
 	}
+
 	if (!mqtt.isConnected()) {
 		mqttInitialized = false;
 	} else {
