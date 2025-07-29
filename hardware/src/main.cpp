@@ -179,6 +179,39 @@ void handleMqttMessage(const char* topic, const String& payload, const size_t si
 	pthread_mutex_unlock(&mutex);
 }
 
+// Add this function before setup()
+void handleResetButton() {
+    resetButtonState = digitalRead(4);
+    
+    if (resetButtonState == HIGH && !buttonWasPressed) {
+        // Button just pressed
+        resetButtonPressedTime = millis();
+        buttonWasPressed = true;
+    }
+
+    if (resetButtonState == HIGH && buttonWasPressed) {
+        // Button is still pressed
+        unsigned long heldTime = millis() - resetButtonPressedTime;
+        if (heldTime >= 10000) {
+            // Button has been held for 10 seconds, factory reset
+            factoryReset();
+            pthread_mutex_lock(&mutex);
+            servoFlag.moveTo(0);
+            pthread_mutex_unlock(&mutex);
+            esp_restart();
+        } else if (heldTime > 100) {
+            // Button pressed for less than 10 seconds, clear current message
+            pthread_mutex_lock(&mutex);
+            flagUpSecondsEndTime = 0;
+            pthread_mutex_unlock(&mutex);
+        }
+    }
+
+    if (resetButtonState == LOW) {
+        buttonWasPressed = false;
+    }
+}
+
 void setup() {
 	Serial.begin(115200);
 	// Wait for the Serial object to become available.
@@ -221,6 +254,7 @@ void setup() {
 			Serial.print('.');
 			delay(1000);
 			wifiConnectTries++;
+			handleResetButton();
 		}
 		if (WiFi.status() == WL_CONNECTED) {
 			Serial.println("\nWiFi connected!");
@@ -233,7 +267,7 @@ void setup() {
 		} else {
 			Serial.println("\nFailed to connect to WiFi.");
 			lcd.write("Wifi connection failed. Check your wifi connection. If problem persists, hold factory reset button for 10 seconds and re-enter Wifi password.");
-			esp_restart();
+			handleResetButton();
 		}
 	}
 
@@ -281,41 +315,7 @@ void loop() {
 	}
 
 
-	// Clear message if reset button pressed quickly
-	// Reset device if reset button has been held for 10 seconds
-	
-	resetButtonState = digitalRead(4);
-
-	if (resetButtonState == HIGH && !buttonWasPressed) {
-		// Button just pressed
-		resetButtonPressedTime = millis();
-		buttonWasPressed = true;
-	}
-
-	if (resetButtonState == HIGH && buttonWasPressed) {
-		// Button is still pressed
-		unsigned long heldTime = millis() - resetButtonPressedTime;
-		if (heldTime >= 10000) {
-			// Button has been held for 10 seconds, factory reset
-			factoryReset();
-			pthread_mutex_lock(&mutex);
-			servoFlag.moveTo(0);
-			pthread_mutex_unlock(&mutex);
-			esp_restart();
-			Serial.printf("RESETTING\n");
-		} else if (heldTime > 100) {
-			// Button pressed for less than 10 seconds, reset the status
-			pthread_mutex_lock(&mutex);
-			flagUpSecondsEndTime = 0;
-			pthread_mutex_unlock(&mutex);
-			//Serial.printf("Reset button pressed for less than 10 seconds but more than 2 seconds, resetting flag up status.\n");
-		}
-		
-	}
-
-	if (resetButtonState == LOW) {
-		buttonWasPressed = false;
-	}
+	handleResetButton();
 	
 }
 
