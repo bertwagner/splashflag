@@ -20,7 +20,8 @@ void setup() {
 
 	servoFlag.init();
 	lcd.init();
-	lcd.write("Welcome to SplashFlag!");
+	controller.init();
+	controller.setDisplayMessage("Welcome to SplashFlag!");
 	
 	//Check if credentials exist
 	auto [ssid,password] = credentialManager.retrieveCredentials();
@@ -33,7 +34,7 @@ void setup() {
 	if (ssid == nullptr || strlen(ssidarr) == 0 || ssid[0] == '\0') {
 		//Serial.printf("Blank SSID\n");
 		portal.init();
-		lcd.write("Please connect to SplashFlag Wifi AP with your phone and visit http://4.3.2.1");
+		controller.setDisplayMessage("Please connect to SplashFlag Wifi AP with your phone and visit http://4.3.2.1");
 	} else {		
 		// Attempt to connect to WiFi using saved credentials
 		WiFi.mode(WIFI_STA);
@@ -52,17 +53,14 @@ void setup() {
 			Serial.print("IP address: ");
 			Serial.println(WiFi.localIP());
 
-			lcd.write("SplashFlag wifi connected! The screen will now go blank until a pool announcement is made.");
-			lcd.turnOff();
+			controller.setDisplayMessageWithDuration("SplashFlag wifi connected! The screen will now go blank until a pool announcement is made.", 3, true);
 			servoFlag.init();
 		} else {
 			Serial.println("\nFailed to connect to WiFi.");
-			lcd.write("Wifi connection failed. Check your wifi connection. If problem persists, hold factory reset button for 10 seconds and re-enter Wifi password.");
+			controller.setDisplayMessage("Wifi connection failed. Check your wifi connection. If problem persists, hold factory reset button for 10 seconds and re-enter Wifi password.");
 			controller.handleResetButton();
 		}
 	}
-
-	controller.init();
 }
 
 void loop() {

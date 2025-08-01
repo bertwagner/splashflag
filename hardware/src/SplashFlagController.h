@@ -12,6 +12,14 @@
 #include <ArduinoJson.h>
 #include <base64.h>
 #include <pthread.h>
+#include <queue>
+
+struct QueuedMessage {
+    char message[512];
+    unsigned long durationSeconds;
+    bool isIndefinite;
+    bool stopAfterOneLoop;
+};
 
 class SplashFlagController {
 private:
@@ -25,6 +33,11 @@ private:
     unsigned long flagUpSecondsEndTime;
     char message[512];
     pthread_mutex_t mutex;
+    
+    std::queue<QueuedMessage> messageQueue;
+    pthread_mutex_t queueMutex;
+    
+    bool forceStop;
     
     static unsigned long resetButtonPressedTime;
     static bool buttonWasPressed;
@@ -45,6 +58,10 @@ public:
     static void* display_thread(void* arg);
     void handleMqttMessage(const char* topic, const String& payload, const size_t size);
     void handleResetButton();
+    void setDisplayMessage(const char* msg);
+    void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds);
+    void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds, bool stopAfterOneLoop);
+    void clearDisplay();
     
     bool getMqttInitialized() const { return mqttInitialized; }
     void setMqttInitialized(bool value) { mqttInitialized = value; }
