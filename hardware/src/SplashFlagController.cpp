@@ -294,8 +294,32 @@ void SplashFlagController::handleMqttMessage(const char* topic, const String& pa
     qMsg.isFromMqtt = true; // This is from MQTT, so flag should be raised
     
     pthread_mutex_lock(&queueMutex);
+    
+    // Clear any existing MQTT messages from the queue before adding the new one
+    std::queue<QueuedMessage> tempQueue;
+    while (!messageQueue.empty()) {
+        QueuedMessage existingMsg = messageQueue.front();
+        messageQueue.pop();
+        // Keep non-MQTT messages in the queue
+        if (!existingMsg.isFromMqtt) {
+            tempQueue.push(existingMsg);
+        }
+    }
+    
+    // Restore non-MQTT messages to the main queue
+    while (!tempQueue.empty()) {
+        messageQueue.push(tempQueue.front());
+        tempQueue.pop();
+    }
+    
+    // Add the new MQTT message
     messageQueue.push(qMsg);
     pthread_mutex_unlock(&queueMutex);
+    
+    // Force stop current message if it's from MQTT to immediately show the new one
+    pthread_mutex_lock(&mutex);
+    forceStop = true;
+    pthread_mutex_unlock(&mutex);
 }
 
 void SplashFlagController::handleResetButton() {
