@@ -29,7 +29,7 @@ std::pair<char*,char*> CredentialManager::retrieveCredentials()
 
     _preferences.end();
 
-    Serial.printf("Retrieved SSID, password: %s, %s\n", ssid,password);
+    //Serial.printf("Retrieved SSID, password: %s, %s\n", ssid,password);
 
     return { ssid,password} ;    
 

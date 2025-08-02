@@ -18,12 +18,13 @@ void setup() {
 	WiFi.disconnect();
 	delay(100);
 
+	// initialize all components
 	servoFlag.init();
 	lcd.init();
 	controller.init();
 	controller.setDisplayMessage("Welcome to SplashFlag!");
 	
-	//Check if credentials exist
+	//Check if wifi credentials exist
 	auto [ssid,password] = credentialManager.retrieveCredentials();
 	char ssidarr[strlen(ssid)+1];
 	strcpy(ssidarr, ssid);

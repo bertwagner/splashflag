@@ -106,6 +106,7 @@ void* SplashFlagController::display_thread(void* arg) {
     unsigned long current_message_duration = 0;
     bool all_screens_shown = false;
     bool current_message_stop_after_loop = false;
+    bool current_message_is_from_mqtt = false;
     
     while (true) {
         // Check if current message should stop displaying
@@ -159,6 +160,7 @@ void* SplashFlagController::display_thread(void* arg) {
                 current_message_indefinite = qMsg.isIndefinite;
                 current_message_duration = qMsg.durationSeconds;
                 current_message_stop_after_loop = qMsg.stopAfterOneLoop;
+                current_message_is_from_mqtt = qMsg.isFromMqtt;
                 message_start_time = millis();
                 
                 controller->lcd.formatForLcd(local_message, &screen_count, &screens);
@@ -170,14 +172,20 @@ void* SplashFlagController::display_thread(void* arg) {
                 
                 pthread_mutex_lock(&controller->mutex);
                 controller->forceStop = false; // Reset force stop flag for new message
-                controller->servoFlag.moveTo(90);
+                // Only raise servo flag for MQTT messages
+                if (current_message_is_from_mqtt) {
+                    controller->servoFlag.moveTo(90);
+                }
                 pthread_mutex_unlock(&controller->mutex);
             } else {
                 pthread_mutex_unlock(&controller->queueMutex);
                 if (displaying && should_stop) {
                     // No more messages and current one expired, or force stop requested
                     pthread_mutex_lock(&controller->mutex);
-                    controller->servoFlag.moveTo(0);
+                    // Only lower servo flag if the current message was from MQTT
+                    if (current_message_is_from_mqtt) {
+                        controller->servoFlag.moveTo(0);
+                    }
                     controller->forceStop = false; // Reset force stop flag
                     pthread_mutex_unlock(&controller->mutex);
                     controller->lcd.turnOff();
@@ -263,8 +271,30 @@ void SplashFlagController::handleMqttMessage(const char* topic, const String& pa
     time_t expirationTime = parseDateTime(expiration_time);
     unsigned long flagUpDurationSeconds = expirationTime - currentTime;
     
-    // Use the queue system instead of direct message setting
-    setDisplayMessageWithDuration(mqttMessage, flagUpDurationSeconds);
+    // Use the queue system for MQTT messages - create message with MQTT flag set
+    QueuedMessage qMsg;
+    strncpy(qMsg.message, mqttMessage, sizeof(qMsg.message) - 1);
+    qMsg.message[sizeof(qMsg.message) - 1] = '\0';
+    
+    // Calculate how many screens this message will need
+    int screen_count = 0;
+    LCDScreen temp_screens[50];
+    lcd.formatForLcd(qMsg.message, &screen_count, &temp_screens);
+    
+    // Ensure duration is long enough to show all screens
+    unsigned long minDurationSeconds = (screen_count * SCROLL_DELAY) / 1000 + 1; // +1 for safety
+    if (flagUpDurationSeconds < minDurationSeconds) {
+        flagUpDurationSeconds = minDurationSeconds;
+    }
+    
+    qMsg.durationSeconds = flagUpDurationSeconds;
+    qMsg.isIndefinite = false;
+    qMsg.stopAfterOneLoop = false;
+    qMsg.isFromMqtt = true; // This is from MQTT, so flag should be raised
+    
+    pthread_mutex_lock(&queueMutex);
+    messageQueue.push(qMsg);
+    pthread_mutex_unlock(&queueMutex);
 }
 
 void SplashFlagController::handleResetButton() {
@@ -300,6 +330,7 @@ void SplashFlagController::setDisplayMessage(const char* msg) {
     qMsg.durationSeconds = 0;
     qMsg.isIndefinite = true;
     qMsg.stopAfterOneLoop = false;
+    qMsg.isFromMqtt = false; // Regular display messages are not from MQTT
     
     pthread_mutex_lock(&queueMutex);
     messageQueue.push(qMsg);
@@ -330,6 +361,7 @@ void SplashFlagController::setDisplayMessageWithDuration(const char* msg, unsign
     qMsg.durationSeconds = durationSeconds;
     qMsg.isIndefinite = false;
     qMsg.stopAfterOneLoop = stopAfterOneLoop;
+    qMsg.isFromMqtt = false; // Regular display messages are not from MQTT
     
     pthread_mutex_lock(&queueMutex);
     messageQueue.push(qMsg);

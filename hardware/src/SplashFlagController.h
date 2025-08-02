@@ -19,6 +19,7 @@ struct QueuedMessage {
     unsigned long durationSeconds;
     bool isIndefinite;
     bool stopAfterOneLoop;
+    bool isFromMqtt;
 };
 
 class SplashFlagController {
