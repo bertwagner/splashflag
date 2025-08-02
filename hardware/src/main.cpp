@@ -59,7 +59,12 @@ void setup() {
 		} else {
 			Serial.println("\nFailed to connect to WiFi.");
 			controller.setDisplayMessage("Wifi connection failed. Check your wifi connection. If problem persists, hold factory reset button for 10 seconds and re-enter Wifi password.");
-			controller.handleResetButton();
+			
+			// Continuously handle reset button after WiFi failure
+			while (true) {
+				controller.handleResetButton();
+				delay(50); // Small delay to prevent excessive CPU usage
+			}
 		}
 	}
 }

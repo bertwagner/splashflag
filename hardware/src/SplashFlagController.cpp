@@ -28,7 +28,8 @@ void SplashFlagController::init() {
 void SplashFlagController::update() {
     if (WiFi.status() != WL_CONNECTED) {
         portal.processNextDNSRequest();
-        Serial.println("Processing next DNS request in captive portal mode.");
+        //Serial.println("Processing next DNS request in captive portal mode.");
+        handleResetButton(); // Handle reset button even when WiFi is disconnected
         return;
     } 
 
