@@ -137,8 +137,10 @@ void* SplashFlagController::display_thread(void* arg) {
             pthread_mutex_unlock(&controller->mutex);
             
             if (force_stop_requested) {
-                // Force stop has highest priority - stop immediately
-                should_stop = true;
+                // Force stop only applies to MQTT messages (from button press)
+                if (current_message_is_from_mqtt) {
+                    should_stop = true;
+                }
             } else if (current_message_indefinite) {
                 // Indefinite messages need minimum time to show all screens, then yield to queue
                 unsigned long elapsed_time = millis() - message_start_time;
@@ -230,6 +232,10 @@ void* SplashFlagController::display_thread(void* arg) {
                             // Only reset to 0 if we should continue looping (not stopAfterOneLoop)
                             if (!current_message_stop_after_loop) {
                                 current_screen = 0;
+                            } else {
+                                // For stopAfterOneLoop messages, keep current_screen at last screen
+                                // to prevent showing screen 0 again
+                                current_screen = screen_count - 1;
                             }
                         } else {
                             // For indefinite messages, loop back to screen 0
@@ -350,7 +356,7 @@ void SplashFlagController::handleResetButton() {
             pthread_mutex_unlock(&mutex);
             esp_restart();
         } else if (heldTime > 100) {
-            clearDisplay();
+            clearMqttMessages(); // Only clear MQTT messages, not system messages
         }
     }
 
@@ -418,9 +424,37 @@ void SplashFlagController::clearDisplay() {
     pthread_mutex_unlock(&mutex);
 }
 
+void SplashFlagController::clearMqttMessages() {
+    pthread_mutex_lock(&queueMutex);
+    
+    // Only clear MQTT messages from the queue, preserve system messages
+    std::queue<QueuedMessage> tempQueue;
+    while (!messageQueue.empty()) {
+        QueuedMessage existingMsg = messageQueue.front();
+        messageQueue.pop();
+        // Keep non-MQTT messages in the queue
+        if (!existingMsg.isFromMqtt) {
+            tempQueue.push(existingMsg);
+        }
+    }
+    
+    // Restore non-MQTT messages to the main queue
+    while (!tempQueue.empty()) {
+        messageQueue.push(tempQueue.front());
+        tempQueue.pop();
+    }
+    
+    pthread_mutex_unlock(&queueMutex);
+    
+    // Force stop current message only if it's from MQTT
+    pthread_mutex_lock(&mutex);
+    forceStop = true; // The display thread will check if current message is MQTT
+    pthread_mutex_unlock(&mutex);
+}
+
 bool SplashFlagController::shouldCheckForUpdate() {
     // Check once per day (86400000 milliseconds = 24 hours)
-    const unsigned long UPDATE_CHECK_INTERVAL = 60000UL; //86400000UL;
+    const unsigned long UPDATE_CHECK_INTERVAL = 86400000UL; // 60000UL;
     
     unsigned long currentTime = millis();
     

@@ -73,6 +73,7 @@ public:
     void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds);
     void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds, bool stopAfterOneLoop);
     void clearDisplay();
+    void clearMqttMessages();
     
     // Firmware update methods
     void checkForFirmwareUpdate();
