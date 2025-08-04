@@ -22,7 +22,7 @@ void setup() {
 	servoFlag.init();
 	lcd.init();
 	controller.init();
-	controller.setDisplayMessage("Welcome to SplashFlag!");
+	controller.setDisplayMessage(("Welcome to SplashFlag! v" + String(FIRMWARE_VERSION)).c_str());
 	
 	//Check if wifi credentials exist
 	auto [ssid,password] = credentialManager.retrieveCredentials();

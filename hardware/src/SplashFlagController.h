@@ -13,6 +13,9 @@
 #include <base64.h>
 #include <pthread.h>
 #include <queue>
+#include <HTTPClient.h>
+#include <Update.h>
+#include <time.h>
 
 struct QueuedMessage {
     char message[512];
@@ -40,6 +43,11 @@ private:
     
     bool forceStop;
     
+    // Firmware update variables
+    unsigned long lastFirmwareCheckTime;
+    bool firmwareUpdateAvailable;
+    String latestFirmwareVersion;
+    
     static unsigned long resetButtonPressedTime;
     static bool buttonWasPressed;
     
@@ -63,6 +71,14 @@ public:
     void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds);
     void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds, bool stopAfterOneLoop);
     void clearDisplay();
+    
+    // Firmware update methods
+    void checkForFirmwareUpdate();
+    bool downloadAndInstallFirmware();
+    bool shouldCheckForUpdate();
+    
+    // Debug helper
+    bool isDebugDevice();
     
     bool getMqttInitialized() const { return mqttInitialized; }
     void setMqttInitialized(bool value) { mqttInitialized = value; }

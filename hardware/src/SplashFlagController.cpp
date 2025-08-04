@@ -5,7 +5,8 @@ bool SplashFlagController::buttonWasPressed = false;
 
 SplashFlagController::SplashFlagController(Lcd& lcd, ServoFlag& servoFlag, CredentialManager& credentialManager, CaptivePortal& portal)
     : lcd(lcd), servoFlag(servoFlag), credentialManager(credentialManager), portal(portal),
-      resetButtonState(0), mqttInitialized(false), flagUpSecondsEndTime(0), forceStop(false) {
+      resetButtonState(0), mqttInitialized(false), flagUpSecondsEndTime(0), forceStop(false),
+      lastFirmwareCheckTime(0), firmwareUpdateAvailable(false), latestFirmwareVersion("") {
     mutex = PTHREAD_MUTEX_INITIALIZER;
     queueMutex = PTHREAD_MUTEX_INITIALIZER;
     memset(message, 0, sizeof(message));
@@ -42,9 +43,14 @@ void SplashFlagController::update() {
         mqtt.subscribe("splashflag/all", [this](const String& payload, const size_t size) {
             handleMqttMessage("all", payload, size);
         });
-        mqtt.subscribe("splashflag/debug", [this](const String& payload, const size_t size) {
-            handleMqttMessage("debug", payload, size);
-        });
+        
+        // Only subscribe to debug messages on authorized devices
+        if (isDebugDevice()) {
+            mqtt.subscribe("splashflag/debug", [this](const String& payload, const size_t size) {
+                handleMqttMessage("debug", payload, size);
+            });
+            Serial.println("Debug subscription enabled for this device");
+        }
 
         mqttInitialized = true;
         Serial.println("MQTT client initialized.");
@@ -54,6 +60,11 @@ void SplashFlagController::update() {
         mqttInitialized = false;
     } else {
         mqtt.update();
+    }
+
+    // Check for firmware updates daily
+    if (shouldCheckForUpdate()) {
+        checkForFirmwareUpdate();
     }
 
     handleResetButton();
@@ -405,4 +416,210 @@ void SplashFlagController::clearDisplay() {
     pthread_mutex_lock(&mutex);
     forceStop = true;
     pthread_mutex_unlock(&mutex);
+}
+
+bool SplashFlagController::shouldCheckForUpdate() {
+    // Check once per day (86400000 milliseconds = 24 hours)
+    const unsigned long UPDATE_CHECK_INTERVAL = 60000UL; //86400000UL;
+    
+    unsigned long currentTime = millis();
+    
+    // Handle millis() overflow (happens every ~49 days)
+    if (currentTime < lastFirmwareCheckTime) {
+        lastFirmwareCheckTime = 0;
+    }
+    
+    return (currentTime - lastFirmwareCheckTime) >= UPDATE_CHECK_INTERVAL;
+}
+
+void SplashFlagController::checkForFirmwareUpdate() {
+    Serial.println("Checking for firmware updates from GitHub...");
+    
+    HTTPClient http;
+    String url = "https://" + String(GITHUB_API_URL) + String(GITHUB_RELEASES_PATH);
+    
+    http.begin(url);
+    http.setTimeout(15000); // 15 second timeout for GitHub API
+    http.addHeader("User-Agent", "SplashFlag-Device/1.0"); // GitHub requires User-Agent
+    http.addHeader("Authorization", "token " + String(GITHUB_TOKEN)); // Private repo authentication
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); // Follow any redirects
+    
+    int httpCode = http.GET();
+    
+    if (httpCode == HTTP_CODE_OK) {
+        String payload = http.getString();
+        Serial.println("GitHub API response received");
+        
+        JsonDocument doc;
+        DeserializationError error = deserializeJson(doc, payload);
+        
+        if (!error) {
+            String serverVersion = doc["tag_name"].as<String>();
+            String currentVersion = String(FIRMWARE_VERSION);
+            
+            // Remove 'v' prefix if present (e.g., "v1.0.1" -> "1.0.1")
+            if (serverVersion.startsWith("v")) {
+                serverVersion = serverVersion.substring(1);
+            }
+            
+            Serial.println("Current version: " + currentVersion);
+            Serial.println("Latest GitHub release: " + serverVersion);
+            
+            if (serverVersion != currentVersion && serverVersion.length() > 0) {
+                firmwareUpdateAvailable = true;
+                latestFirmwareVersion = serverVersion;
+                
+                // Find the firmware binary asset in the release
+                JsonArray assets = doc["assets"];
+                String downloadUrl = "";
+                
+                for (JsonVariant asset : assets) {
+                    String assetName = asset["name"].as<String>();
+                    if (assetName.endsWith(".bin") || assetName == "splashflag.bin" || assetName == "firmware.bin") {
+                        downloadUrl = asset["browser_download_url"].as<String>();
+                        Serial.println("Found firmware asset: " + assetName);
+                        break;
+                    }
+                }
+                
+                if (downloadUrl.length() > 0) {
+                    Serial.println("Firmware update available: " + serverVersion);
+                    setDisplayMessage(("Firmware update available: v" + serverVersion + ". Device will update automatically.").c_str());
+                    
+                    // Store the download URL for the download function
+                    latestFirmwareVersion = downloadUrl; // Reuse this field to store URL
+                    
+                    // Automatically download and install the update
+                    if (downloadAndInstallFirmware()) {
+                        Serial.println("Firmware update completed. Restarting...");
+                        ESP.restart();
+                    } else {
+                        Serial.println("Firmware update failed.");
+                        setDisplayMessageWithDuration("Firmware update failed. Will retry tomorrow.", 10, true);
+                    }
+                } else {
+                    Serial.println("No firmware binary found in GitHub release");
+                    setDisplayMessageWithDuration("Firmware update found but no binary available.", 8, true);
+                }
+            } else {
+                Serial.println("Firmware is up to date.");
+            }
+        } else {
+            Serial.println("Failed to parse GitHub API response: " + String(error.c_str()));
+        }
+    } else {
+        Serial.println("GitHub API request failed with HTTP code: " + String(httpCode));
+        if (httpCode == 403) {
+            Serial.println("GitHub API rate limit may be exceeded");
+        }
+    }
+    
+    http.end();
+    lastFirmwareCheckTime = millis();
+}
+
+bool SplashFlagController::downloadAndInstallFirmware() {
+    if (!firmwareUpdateAvailable || latestFirmwareVersion.length() == 0) {
+        return false;
+    }
+    
+    Serial.println("Starting firmware download from GitHub...");
+    setDisplayMessage("Downloading firmware update...");
+    
+    HTTPClient http;
+    String url = latestFirmwareVersion; // This now contains the GitHub download URL
+    
+    http.begin(url);
+    http.setTimeout(60000); // 60 second timeout for GitHub download
+    http.addHeader("User-Agent", "SplashFlag-Device/1.0"); // GitHub requires User-Agent
+    http.addHeader("Authorization", "token " + String(GITHUB_TOKEN)); // Private repo authentication
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); // Follow GitHub redirects
+    
+    int httpCode = http.GET();
+    
+    if (httpCode != HTTP_CODE_OK) {
+        Serial.println("Firmware download failed with HTTP code: " + String(httpCode));
+        http.end();
+        return false;
+    }
+    
+    int contentLength = http.getSize();
+    
+    if (contentLength <= 0) {
+        Serial.println("Invalid firmware file size");
+        http.end();
+        return false;
+    }
+    
+    Serial.println("Firmware size: " + String(contentLength) + " bytes");
+    
+    if (!Update.begin(contentLength)) {
+        Serial.println("Not enough space for firmware update");
+        http.end();
+        return false;
+    }
+    
+    setDisplayMessage("Installing firmware update...");
+    
+    WiFiClient* client = http.getStreamPtr();
+    size_t written = 0;
+    uint8_t buffer[128];
+    
+    while (http.connected() && (written < contentLength)) {
+        size_t available = client->available();
+        if (available) {
+            int bytesToRead = min(available, sizeof(buffer));
+            int bytesRead = client->readBytes(buffer, bytesToRead);
+            
+            if (Update.write(buffer, bytesRead) != bytesRead) {
+                Serial.println("Firmware write failed");
+                Update.abort();
+                http.end();
+                return false;
+            }
+            
+            written += bytesRead;
+            
+            // Show progress
+            int progress = (written * 100) / contentLength;
+            if (progress % 10 == 0) {
+                Serial.println("Firmware install progress: " + String(progress) + "%");
+            }
+        }
+        delay(1);
+    }
+    
+    if (!Update.end(true)) {
+        Serial.println("Firmware update failed: " + String(Update.getError()));
+        http.end();
+        return false;
+    }
+    
+    if (!Update.isFinished()) {
+        Serial.println("Firmware update incomplete");
+        http.end();
+        return false;
+    }
+    
+    Serial.println("Firmware update completed successfully");
+    setDisplayMessage("Firmware update completed. Restarting...");
+    
+    http.end();
+    return true;
+}
+
+bool SplashFlagController::isDebugDevice() {
+    String mac = WiFi.macAddress();
+    String macSuffix = mac.substring(mac.length() - 8); // Get last 8 chars (includes colons)
+    macSuffix.replace(":", ""); // Remove colons to get last 6 hex chars
+    macSuffix.toUpperCase(); // Ensure uppercase for comparison
+    
+    Serial.println("Device MAC suffix: " + macSuffix);
+    
+    // Check against authorized debug device MACs
+    if (macSuffix == String(DEBUG_DEVICE_MAC_1)) {
+        return true;
+    }
+    
+    return false;
 }

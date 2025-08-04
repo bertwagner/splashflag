@@ -1,35 +1,75 @@
 #!/bin/bash
-  VERSION=$1
+VERSION=$1
 
-  if [ -z "$VERSION" ]; then
-      echo "Usage: ./build-release.sh v1.0.1"
-      exit 1
-  fi
+if [ -z "$VERSION" ]; then
+    echo "Usage: ./build-release.sh v1.0.1"
+    exit 1
+fi
 
-  # Update version in secrets.h
-  sed -i '' "s/#define FIRMWARE_VERSION \".*\"/#define FIRMWARE_VERSION \"${VERSION#v}\"/"
-  src/secrets.h
+# Remove 'v' prefix for version number
+VERSION_NUMBER=${VERSION#v}
 
-  # Build firmware
-  echo "Building firmware..."
-  pio run
+echo "Building SplashFlag firmware version: $VERSION"
 
-  # Check if build succeeded
-  if [ $? -eq 0 ]; then
-      echo "Build successful! Binary location:"
-      echo ".pio/build/arduino_nano_esp32/firmware.bin"
+# Update version in secrets.h
+echo "Updating version in secrets.h..."
+sed -i '' "s/#define FIRMWARE_VERSION \".*\"/#define FIRMWARE_VERSION \"$VERSION_NUMBER\"/" src/secrets.h
 
-      # Optional: Copy to releases folder
-      mkdir -p releases
-      cp .pio/build/arduino_nano_esp32/firmware.bin releases/splashflag-${VERSION}.bin
+# Build firmware
+echo "Building firmware..."
+pio run
 
-       git tag v${VERSION}
-        git push origin v${VERSION}
+# Check if build succeeded
+if [ $? -eq 0 ]; then
+    echo "✅ Build successful!"
+    
+    # Create releases directory
+    mkdir -p releases
+    
+    # Copy firmware binary with version name
+    cp .pio/build/arduino_nano_esp32/firmware.bin releases/splashflag-${VERSION}.bin
+    
+    # Also create a generic firmware.bin for devices that expect that name
+    cp .pio/build/arduino_nano_esp32/firmware.bin releases/firmware.bin
+    
+    echo "📦 Binary files created:"
+    echo "  - releases/splashflag-${VERSION}.bin"
+    echo "  - releases/firmware.bin"
+    
+    # Create release in the PRIVATE splashflag-releases repository
+    echo "🚀 Creating release in bertwagner/splashflag-releases..."
+    
+    # Use gh CLI to create release in the private releases repo
+    gh release create $VERSION \
+        releases/splashflag-${VERSION}.bin \
+        releases/firmware.bin \
+        --repo bertwagner/splashflag-releases \
+        --title "SplashFlag $VERSION" \
+        --notes "SplashFlag firmware release $VERSION
 
-        # Create release and upload binary
-        gh release create v${VERSION}  releases/splashflag-${VERSION}.bin \
-            --title "SplashFlag v${VERSION}" 
-  else
-      echo "Build failed!"
-      exit 1
-  fi
+Built from: bertwagner/splashflag@$(git rev-parse --short HEAD)"
+    
+    if [ $? -eq 0 ]; then
+        echo "✅ Release created successfully in bertwagner/splashflag-releases"
+        echo "🔗 Devices will automatically detect and install this update"
+        
+        # Optionally tag the source repo (but don't create release there)
+        echo "📌 Tagging source repository..."
+        git tag $VERSION
+        git push origin $VERSION
+        
+        echo ""
+        echo "🎉 Release $VERSION complete!"
+        echo "   Source code: tagged in bertwagner/splashflag"
+        echo "   Binary release: published to bertwagner/splashflag-releases"
+        
+    else
+        echo "❌ Failed to create release in bertwagner/splashflag-releases"
+        echo "Make sure you have access to the private repository"
+        exit 1
+    fi
+    
+else
+    echo "❌ Build failed!"
+    exit 1
+fi
