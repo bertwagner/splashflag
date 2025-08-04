@@ -26,22 +26,22 @@ if [ $? -eq 0 ]; then
     # Create releases directory
     mkdir -p releases
     
-    # Copy firmware binary with version name
-    cp .pio/build/arduino_nano_esp32/firmware.bin releases/splashflag-${VERSION}.bin
-    
-    # Also create a generic firmware.bin for devices that expect that name
+    # Create the firmware.bin file for release
     cp .pio/build/arduino_nano_esp32/firmware.bin releases/firmware.bin
     
-    echo "📦 Binary files created:"
-    echo "  - releases/splashflag-${VERSION}.bin"
+    echo "📦 Binary file created:"
     echo "  - releases/firmware.bin"
     
     # Create release in the PRIVATE splashflag-releases repository
     echo "🚀 Creating release in bertwagner/splashflag-releases..."
     
+    # Ensure version has 'v' prefix for GitHub release
+    if [[ ! $VERSION == v* ]]; then
+        VERSION="v$VERSION"
+    fi
+    
     # Use gh CLI to create release in the private releases repo
     gh release create $VERSION \
-        releases/splashflag-${VERSION}.bin \
         releases/firmware.bin \
         --repo bertwagner/splashflag-releases \
         --title "SplashFlag $VERSION" \

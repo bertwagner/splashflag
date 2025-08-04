@@ -6,7 +6,7 @@ bool SplashFlagController::buttonWasPressed = false;
 SplashFlagController::SplashFlagController(Lcd& lcd, ServoFlag& servoFlag, CredentialManager& credentialManager, CaptivePortal& portal)
     : lcd(lcd), servoFlag(servoFlag), credentialManager(credentialManager), portal(portal),
       resetButtonState(0), mqttInitialized(false), flagUpSecondsEndTime(0), forceStop(false),
-      lastFirmwareCheckTime(0), firmwareUpdateAvailable(false), latestFirmwareVersion("") {
+      lastFirmwareCheckTime(0), firmwareUpdateAvailable(false), latestFirmwareVersion(""), firmwareDownloadUrl("") {
     mutex = PTHREAD_MUTEX_INITIALIZER;
     queueMutex = PTHREAD_MUTEX_INITIALIZER;
     memset(message, 0, sizeof(message));
@@ -438,11 +438,19 @@ void SplashFlagController::checkForFirmwareUpdate() {
     HTTPClient http;
     String url = "https://" + String(GITHUB_API_URL) + String(GITHUB_RELEASES_PATH);
     
-    http.begin(url);
+    Serial.println("Connecting to: " + url);
+    
+    // Configure SSL for GitHub - use WiFiClientSecure for better SSL handling
+    WiFiClientSecure *client = new WiFiClientSecure;
+    client->setInsecure(); // Skip SSL certificate verification
+    
+    http.begin(*client, url);
     http.setTimeout(15000); // 15 second timeout for GitHub API
     http.addHeader("User-Agent", "SplashFlag-Device/1.0"); // GitHub requires User-Agent
     http.addHeader("Authorization", "token " + String(GITHUB_TOKEN)); // Private repo authentication
+    http.addHeader("Accept", "application/vnd.github.v3+json"); // GitHub API version
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); // Follow any redirects
+    http.setReuse(false);
     
     int httpCode = http.GET();
     
@@ -454,10 +462,13 @@ void SplashFlagController::checkForFirmwareUpdate() {
         DeserializationError error = deserializeJson(doc, payload);
         
         if (!error) {
-            String serverVersion = doc["tag_name"].as<String>();
+            String serverTagName = doc["tag_name"].as<String>();
+            String serverVersion = serverTagName;
             String currentVersion = String(FIRMWARE_VERSION);
             
-            // Remove 'v' prefix if present (e.g., "v1.0.1" -> "1.0.1")
+            Serial.println("GitHub tag_name: " + serverTagName);
+            
+            // Remove 'v' prefix if present for version comparison (e.g., "v1.0.1" -> "1.0.1")
             if (serverVersion.startsWith("v")) {
                 serverVersion = serverVersion.substring(1);
             }
@@ -475,9 +486,10 @@ void SplashFlagController::checkForFirmwareUpdate() {
                 
                 for (JsonVariant asset : assets) {
                     String assetName = asset["name"].as<String>();
-                    if (assetName.endsWith(".bin") || assetName == "splashflag.bin" || assetName == "firmware.bin") {
+                    if (assetName == "firmware.bin") {
                         downloadUrl = asset["browser_download_url"].as<String>();
                         Serial.println("Found firmware asset: " + assetName);
+                        Serial.println("Asset download URL: " + downloadUrl);
                         break;
                     }
                 }
@@ -486,8 +498,9 @@ void SplashFlagController::checkForFirmwareUpdate() {
                     Serial.println("Firmware update available: " + serverVersion);
                     setDisplayMessage(("Firmware update available: v" + serverVersion + ". Device will update automatically.").c_str());
                     
-                    // Store the download URL for the download function
-                    latestFirmwareVersion = downloadUrl; // Reuse this field to store URL
+                    // Store both version and download URL
+                    latestFirmwareVersion = serverVersion;
+                    firmwareDownloadUrl = downloadUrl;
                     
                     // Automatically download and install the update
                     if (downloadAndInstallFirmware()) {
@@ -511,25 +524,41 @@ void SplashFlagController::checkForFirmwareUpdate() {
         Serial.println("GitHub API request failed with HTTP code: " + String(httpCode));
         if (httpCode == 403) {
             Serial.println("GitHub API rate limit may be exceeded");
+        } else if (httpCode == -1) {
+            Serial.println("Connection failed - check WiFi, DNS, or SSL certificate issues");
+            Serial.println("Attempted URL: " + url);
+        } else if (httpCode == -5) {
+            Serial.println("Connection timeout - check internet connection and GitHub availability");
+            Serial.println("Attempted URL: " + url);
+        } else if (httpCode == 404) {
+            Serial.println("Repository not found - check repo name and token permissions");
+        } else if (httpCode == 401) {
+            Serial.println("Authentication failed - check GitHub token");
         }
     }
     
     http.end();
+    delete client; // Clean up WiFiClientSecure
     lastFirmwareCheckTime = millis();
 }
 
 bool SplashFlagController::downloadAndInstallFirmware() {
-    if (!firmwareUpdateAvailable || latestFirmwareVersion.length() == 0) {
+    if (!firmwareUpdateAvailable || firmwareDownloadUrl.length() == 0) {
         return false;
     }
     
     Serial.println("Starting firmware download from GitHub...");
+    Serial.println("Download URL: " + firmwareDownloadUrl);
     setDisplayMessage("Downloading firmware update...");
     
     HTTPClient http;
-    String url = latestFirmwareVersion; // This now contains the GitHub download URL
+    String url = firmwareDownloadUrl; // This now contains the GitHub download URL
     
-    http.begin(url);
+    // Configure SSL for GitHub download
+    WiFiClientSecure *client = new WiFiClientSecure;
+    client->setInsecure(); // Skip SSL certificate verification
+    
+    http.begin(*client, url);
     http.setTimeout(60000); // 60 second timeout for GitHub download
     http.addHeader("User-Agent", "SplashFlag-Device/1.0"); // GitHub requires User-Agent
     http.addHeader("Authorization", "token " + String(GITHUB_TOKEN)); // Private repo authentication
@@ -539,7 +568,14 @@ bool SplashFlagController::downloadAndInstallFirmware() {
     
     if (httpCode != HTTP_CODE_OK) {
         Serial.println("Firmware download failed with HTTP code: " + String(httpCode));
+        Serial.println("Failed URL: " + url);
+        if (httpCode == 404) {
+            Serial.println("Asset not found - check if firmware.bin exists in the release");
+        } else if (httpCode == 401) {
+            Serial.println("Authentication failed - check GitHub token permissions");
+        }
         http.end();
+        delete client;
         return false;
     }
     
@@ -561,15 +597,15 @@ bool SplashFlagController::downloadAndInstallFirmware() {
     
     setDisplayMessage("Installing firmware update...");
     
-    WiFiClient* client = http.getStreamPtr();
+    WiFiClient* stream = http.getStreamPtr();
     size_t written = 0;
     uint8_t buffer[128];
     
     while (http.connected() && (written < contentLength)) {
-        size_t available = client->available();
+        size_t available = stream->available();
         if (available) {
             int bytesToRead = min(available, sizeof(buffer));
-            int bytesRead = client->readBytes(buffer, bytesToRead);
+            int bytesRead = stream->readBytes(buffer, bytesToRead);
             
             if (Update.write(buffer, bytesRead) != bytesRead) {
                 Serial.println("Firmware write failed");
@@ -605,6 +641,7 @@ bool SplashFlagController::downloadAndInstallFirmware() {
     setDisplayMessage("Firmware update completed. Restarting...");
     
     http.end();
+    delete client; // Clean up WiFiClientSecure
     return true;
 }
 

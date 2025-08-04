@@ -14,6 +14,7 @@
 #include <pthread.h>
 #include <queue>
 #include <HTTPClient.h>
+#include <WiFiClientSecure.h>
 #include <Update.h>
 #include <time.h>
 
@@ -47,6 +48,7 @@ private:
     unsigned long lastFirmwareCheckTime;
     bool firmwareUpdateAvailable;
     String latestFirmwareVersion;
+    String firmwareDownloadUrl;
     
     static unsigned long resetButtonPressedTime;
     static bool buttonWasPressed;
