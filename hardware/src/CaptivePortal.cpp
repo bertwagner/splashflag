@@ -180,7 +180,7 @@ void CaptivePortal::setUpWebserver(AsyncWebServer &server, const IPAddress &loca
             strncpy(input_password, value, sizeof(input_password) - 1);
             input_password[sizeof(input_password) - 1] = '\0'; // Ensure null termination
 
-            Serial.printf("Password: %s\n", input_password);
+            //Serial.printf("Password: %s\n", input_password);
         }
 
 		AsyncWebServerResponse *response = request->beginResponse(200, "text/html", save_html);

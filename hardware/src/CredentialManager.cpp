@@ -13,7 +13,7 @@ void CredentialManager::saveCredentials(const char *ssid, const char *password)
     _preferences.putString("wifi_pass", password);
     _preferences.end();
 
-    Serial.printf("Saved credentials %s, %s\n", ssid, password);
+    //Serial.printf("Saved credentials %s, %s\n", ssid, password);
 
 };
 
