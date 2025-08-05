@@ -1,26 +1,25 @@
+#pragma once
 #include <Arduino.h>
-
-// Captive Portal
-#include <AsyncTCP.h>  //https://github.com/me-no-dev/AsyncTCP using the latest dev version from @me-no-dev
+#include <AsyncTCP.h>
 #include <DNSServer.h>
-#include <ESPAsyncWebServer.h>	//https://github.com/me-no-dev/ESPAsyncWebServer using the latest dev version from @me-no-dev
-#include <esp_wifi.h>			//Used for mpdu_rx_disable android workaround
-#include "CredentialManager.h"
+#include <ESPAsyncWebServer.h>
+#include <esp_wifi.h>
 #include <esp_system.h>
+#include "CredentialManager.h"
 #include "Lcd.h"
 
 class CaptivePortal {
     public:
-        CaptivePortal(CredentialManager& CredentialManager, Lcd& lcd);
+        CaptivePortal(CredentialManager& credentialManager, Lcd& lcd);
 
         void init();
         void processNextDNSRequest();
 
     private:
-        CredentialManager& credentialManager;
-        Lcd& lcd;
+        CredentialManager& _credentialManager;
+        Lcd& _lcd;
 
-        void setUpDNSServer(DNSServer &dnsServer, const IPAddress &localIP);
-        void startSoftAccessPoint(const char *ssid, const char *password, const IPAddress &localIP, const IPAddress &gatewayIP);
-        void setUpWebserver(AsyncWebServer &server, const IPAddress &localIP);
+        void _setUpDNSServer(DNSServer& dnsServer, const IPAddress& localIP);
+        void _startSoftAccessPoint(const char* ssid, const char* password, const IPAddress& localIP, const IPAddress& gatewayIP);
+        void _setUpWebserver(AsyncWebServer& server, const IPAddress& localIP);
 };

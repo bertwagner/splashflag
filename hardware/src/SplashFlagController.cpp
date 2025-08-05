@@ -1,20 +1,20 @@
 #include "SplashFlagController.h"
 
-unsigned long SplashFlagController::resetButtonPressedTime = 0;
-bool SplashFlagController::buttonWasPressed = false;
+unsigned long SplashFlagController::_resetButtonPressedTime = 0;
+bool SplashFlagController::_buttonWasPressed = false;
 
 SplashFlagController::SplashFlagController(Lcd& lcd, ServoFlag& servoFlag, CredentialManager& credentialManager, CaptivePortal& portal)
-    : lcd(lcd), servoFlag(servoFlag), credentialManager(credentialManager), portal(portal),
-      resetButtonState(0), mqttInitialized(false), flagUpSecondsEndTime(0), forceStop(false),
-      lastFirmwareCheckTime(0), firmwareUpdateAvailable(false), latestFirmwareVersion(""), firmwareDownloadUrl("") {
-    mutex = PTHREAD_MUTEX_INITIALIZER;
-    queueMutex = PTHREAD_MUTEX_INITIALIZER;
-    memset(message, 0, sizeof(message));
+    : _lcd(lcd), _servoFlag(servoFlag), _credentialManager(credentialManager), _portal(portal),
+      _resetButtonState(0), _mqttInitialized(false), _flagUpSecondsEndTime(0), _forceStop(false),
+      _lastFirmwareCheckTime(0), _firmwareUpdateAvailable(false), _latestFirmwareVersion(""), _firmwareDownloadUrl("") {
+    _mutex = PTHREAD_MUTEX_INITIALIZER;
+    _queueMutex = PTHREAD_MUTEX_INITIALIZER;
+    memset(_message, 0, sizeof(_message));
 }
 
 SplashFlagController::~SplashFlagController() {
-    pthread_mutex_destroy(&mutex);
-    pthread_mutex_destroy(&queueMutex);
+    pthread_mutex_destroy(&_mutex);
+    pthread_mutex_destroy(&_queueMutex);
 }
 
 void SplashFlagController::init() {
@@ -28,41 +28,38 @@ void SplashFlagController::init() {
 
 void SplashFlagController::update() {
     if (WiFi.status() != WL_CONNECTED) {
-        portal.processNextDNSRequest();
-        //Serial.println("Processing next DNS request in captive portal mode.");
-        handleResetButton(); // Handle reset button even when WiFi is disconnected
+        _portal.processNextDNSRequest();
+        handleResetButton();
         return;
     } 
 
-    if (!mqttInitialized) {
-        mqtt.disconnect();
-        mqtt.begin(client);
+    if (!_mqttInitialized) {
+        _mqtt.disconnect();
+        _mqtt.begin(_client);
 
         connect();
 
-        mqtt.subscribe("splashflag/all", [this](const String& payload, const size_t size) {
+        _mqtt.subscribe("splashflag/all", [this](const String& payload, const size_t size) {
             handleMqttMessage("all", payload, size);
         });
         
-        // Only subscribe to debug messages on authorized devices
         if (isDebugDevice()) {
-            mqtt.subscribe("splashflag/debug", [this](const String& payload, const size_t size) {
+            _mqtt.subscribe("splashflag/debug", [this](const String& payload, const size_t size) {
                 handleMqttMessage("debug", payload, size);
             });
             Serial.println("Debug subscription enabled for this device");
         }
 
-        mqttInitialized = true;
+        _mqttInitialized = true;
         Serial.println("MQTT client initialized.");
     }
 
-    if (!mqtt.isConnected()) {
-        mqttInitialized = false;
+    if (!_mqtt.isConnected()) {
+        _mqttInitialized = false;
     } else {
-        mqtt.update();
+        _mqtt.update();
     }
 
-    // Check for firmware updates daily
     if (shouldCheckForUpdate()) {
         checkForFirmwareUpdate();
     }
@@ -71,26 +68,26 @@ void SplashFlagController::update() {
 }
 
 bool SplashFlagController::shouldStopDisplaying() {
-    pthread_mutex_lock(&mutex);
-    bool stop = (flagUpSecondsEndTime > 0) && ((millis()/1000) >= flagUpSecondsEndTime);
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&_mutex);
+    bool stop = (_flagUpSecondsEndTime > 0) && ((millis()/1000) >= _flagUpSecondsEndTime);
+    pthread_mutex_unlock(&_mutex);
     return stop;
 }
 
 void SplashFlagController::connect() {
 connect_to_host:
     Serial.println("connecting to host...");
-    client.disconnect();
+    _client.disconnect();
 
-    client.begin(MQTT_BROKER_URL, 80, "/", "mqtt");
-    client.setReconnectInterval(2000);
+    _client.begin(MQTT_BROKER_URL, 80, "/", "mqtt");
+    _client.setReconnectInterval(2000);
 
     Serial.print("connecting to mqtt broker...");
-    while (!mqtt.connect("arduino", MQTT_USERNAME, MQTT_PASSWORD)) {
+    while (!_mqtt.connect("arduino", MQTT_USERNAME, MQTT_PASSWORD)) {
         Serial.print(".");
         setDisplayMessage("Connecting to SplashFlag...");
        
-        if (!client.isConnected()) {
+        if (!_client.isConnected()) {
             Serial.println("WebSocketsClient disconnected");
             goto connect_to_host;
         }
@@ -101,7 +98,7 @@ connect_to_host:
 void SplashFlagController::factoryReset() {
     Serial.printf("FACTORY RESET");
     setDisplayMessage("RESETTING TO FACTORY SETTINGS");
-    credentialManager.saveCredentials("","");
+    _credentialManager.saveCredentials("","");
 }
 
 void* SplashFlagController::display_thread(void* arg) {
@@ -121,53 +118,45 @@ void* SplashFlagController::display_thread(void* arg) {
     bool current_message_is_from_mqtt = false;
     
     while (true) {
-        // Check if current message should stop displaying
         bool should_stop = false;
         bool has_queued_messages = false;
         
-        // Check if there are more messages waiting
-        pthread_mutex_lock(&controller->queueMutex);
-        has_queued_messages = !controller->messageQueue.empty();
-        pthread_mutex_unlock(&controller->queueMutex);
+        pthread_mutex_lock(&controller->_queueMutex);
+        has_queued_messages = !controller->_messageQueue.empty();
+        pthread_mutex_unlock(&controller->_queueMutex);
         
         if (displaying) {
-            // Check for force stop (from reset button)
-            pthread_mutex_lock(&controller->mutex);
-            bool force_stop_requested = controller->forceStop;
-            pthread_mutex_unlock(&controller->mutex);
+            pthread_mutex_lock(&controller->_mutex);
+            bool force_stop_requested = controller->_forceStop;
+            pthread_mutex_unlock(&controller->_mutex);
             
             if (force_stop_requested) {
-                // Force stop only applies to MQTT messages (from button press)
                 if (current_message_is_from_mqtt) {
                     should_stop = true;
                 }
             } else if (current_message_indefinite) {
-                // Indefinite messages need minimum time to show all screens, then yield to queue
                 unsigned long elapsed_time = millis() - message_start_time;
-                unsigned long min_display_time = screen_count * SCROLL_DELAY + 1000; // All screens + 1 second buffer
+                unsigned long min_display_time = screen_count * SCROLL_DELAY + 1000;
                 
                 should_stop = has_queued_messages && (elapsed_time >= min_display_time);
             } else {
-                // Timed messages stop when duration expires OR (all screens shown AND stopAfterOneLoop is true)
                 bool duration_expired = (millis() - message_start_time) >= (current_message_duration * 1000);
                 bool should_stop_after_loop = current_message_stop_after_loop && all_screens_shown;
                 should_stop = duration_expired || should_stop_after_loop;
             }
         }
         
-        // Check for new message in queue or if current message should stop
         bool need_new_message = !displaying || should_stop;
         if (need_new_message) {
-            pthread_mutex_lock(&controller->queueMutex);
-            if (!controller->messageQueue.empty()) {
-                QueuedMessage qMsg = controller->messageQueue.front();
-                controller->messageQueue.pop();
-                pthread_mutex_unlock(&controller->queueMutex);
+            pthread_mutex_lock(&controller->_queueMutex);
+            if (!controller->_messageQueue.empty()) {
+                QueuedMessage qMsg = controller->_messageQueue.front();
+                controller->_messageQueue.pop();
+                pthread_mutex_unlock(&controller->_queueMutex);
                 
-                // Clear display before transitioning to prevent flashing
                 if (displaying) {
-                    controller->lcd.turnOff();
-                    delay(100); // Brief pause for clean transition
+                    controller->_lcd.turnOff();
+                    delay(100);
                 }
                 
                 strcpy(local_message, qMsg.message);
@@ -177,68 +166,57 @@ void* SplashFlagController::display_thread(void* arg) {
                 current_message_is_from_mqtt = qMsg.isFromMqtt;
                 message_start_time = millis();
                 
-                controller->lcd.formatForLcd(local_message, &screen_count, &screens);
+                controller->_lcd.formatForLcd(local_message, &screen_count, &screens);
                 current_screen = 0;
                 last_screen_change = millis();
                 displaying = true;
                 screen_drawn = false;
-                all_screens_shown = (screen_count <= 1); // Single screen messages are immediately "all shown"
+                all_screens_shown = (screen_count <= 1);
                 
-                pthread_mutex_lock(&controller->mutex);
-                controller->forceStop = false; // Reset force stop flag for new message
-                // Only raise servo flag for MQTT messages
+                pthread_mutex_lock(&controller->_mutex);
+                controller->_forceStop = false;
                 if (current_message_is_from_mqtt) {
-                    controller->servoFlag.moveTo(90);
+                    controller->_servoFlag.moveTo(90);
                 }
-                pthread_mutex_unlock(&controller->mutex);
+                pthread_mutex_unlock(&controller->_mutex);
             } else {
-                pthread_mutex_unlock(&controller->queueMutex);
+                pthread_mutex_unlock(&controller->_queueMutex);
                 if (displaying && should_stop) {
-                    // No more messages and current one expired, or force stop requested
-                    pthread_mutex_lock(&controller->mutex);
-                    // Only lower servo flag if the current message was from MQTT
+                    pthread_mutex_lock(&controller->_mutex);
                     if (current_message_is_from_mqtt) {
-                        controller->servoFlag.moveTo(0);
+                        controller->_servoFlag.moveTo(0);
                     }
-                    controller->forceStop = false; // Reset force stop flag
-                    pthread_mutex_unlock(&controller->mutex);
-                    controller->lcd.turnOff();
+                    controller->_forceStop = false;
+                    pthread_mutex_unlock(&controller->_mutex);
+                    controller->_lcd.turnOff();
                     displaying = false;
                     screen_drawn = false;
                 }
             }
         }
         
-        // Display current message screens
         if (displaying && screen_count > 0) {
-            // Check if force stop is requested before any screen operations
-            pthread_mutex_lock(&controller->mutex);
-            bool force_stop_check = controller->forceStop;
-            pthread_mutex_unlock(&controller->mutex);
+            pthread_mutex_lock(&controller->_mutex);
+            bool force_stop_check = controller->_forceStop;
+            pthread_mutex_unlock(&controller->_mutex);
             
             if (!force_stop_check) {
                 if (!screen_drawn) {
-                    controller->lcd.displayScreen(screens[current_screen]);
+                    controller->_lcd.displayScreen(screens[current_screen]);
                     screen_drawn = true;
                 }
                 
                 if (millis() - last_screen_change >= SCROLL_DELAY) {
                     current_screen++;
                     if (current_screen >= screen_count) {
-                        // We've shown all screens once
                         if (!current_message_indefinite) {
-                            // For timed messages, mark as all screens shown
                             all_screens_shown = true;
-                            // Only reset to 0 if we should continue looping (not stopAfterOneLoop)
                             if (!current_message_stop_after_loop) {
                                 current_screen = 0;
                             } else {
-                                // For stopAfterOneLoop messages, keep current_screen at last screen
-                                // to prevent showing screen 0 again
                                 current_screen = screen_count - 1;
                             }
                         } else {
-                            // For indefinite messages, loop back to screen 0
                             current_screen = 0;
                         }
                     }
@@ -289,18 +267,15 @@ void SplashFlagController::handleMqttMessage(const char* topic, const String& pa
     time_t expirationTime = parseDateTime(expiration_time);
     unsigned long flagUpDurationSeconds = expirationTime - currentTime;
     
-    // Use the queue system for MQTT messages - create message with MQTT flag set
     QueuedMessage qMsg;
     strncpy(qMsg.message, mqttMessage, sizeof(qMsg.message) - 1);
     qMsg.message[sizeof(qMsg.message) - 1] = '\0';
     
-    // Calculate how many screens this message will need
     int screen_count = 0;
     LCDScreen temp_screens[50];
-    lcd.formatForLcd(qMsg.message, &screen_count, &temp_screens);
+    _lcd.formatForLcd(qMsg.message, &screen_count, &temp_screens);
     
-    // Ensure duration is long enough to show all screens
-    unsigned long minDurationSeconds = (screen_count * SCROLL_DELAY) / 1000 + 1; // +1 for safety
+    unsigned long minDurationSeconds = (screen_count * SCROLL_DELAY) / 1000 + 1;
     if (flagUpDurationSeconds < minDurationSeconds) {
         flagUpDurationSeconds = minDurationSeconds;
     }
@@ -308,60 +283,55 @@ void SplashFlagController::handleMqttMessage(const char* topic, const String& pa
     qMsg.durationSeconds = flagUpDurationSeconds;
     qMsg.isIndefinite = false;
     qMsg.stopAfterOneLoop = false;
-    qMsg.isFromMqtt = true; // This is from MQTT, so flag should be raised
+    qMsg.isFromMqtt = true;
     
-    pthread_mutex_lock(&queueMutex);
+    pthread_mutex_lock(&_queueMutex);
     
-    // Clear any existing MQTT messages from the queue before adding the new one
     std::queue<QueuedMessage> tempQueue;
-    while (!messageQueue.empty()) {
-        QueuedMessage existingMsg = messageQueue.front();
-        messageQueue.pop();
-        // Keep non-MQTT messages in the queue
+    while (!_messageQueue.empty()) {
+        QueuedMessage existingMsg = _messageQueue.front();
+        _messageQueue.pop();
         if (!existingMsg.isFromMqtt) {
             tempQueue.push(existingMsg);
         }
     }
     
-    // Restore non-MQTT messages to the main queue
     while (!tempQueue.empty()) {
-        messageQueue.push(tempQueue.front());
+        _messageQueue.push(tempQueue.front());
         tempQueue.pop();
     }
     
-    // Add the new MQTT message
-    messageQueue.push(qMsg);
-    pthread_mutex_unlock(&queueMutex);
+    _messageQueue.push(qMsg);
+    pthread_mutex_unlock(&_queueMutex);
     
-    // Force stop current message if it's from MQTT to immediately show the new one
-    pthread_mutex_lock(&mutex);
-    forceStop = true;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&_mutex);
+    _forceStop = true;
+    pthread_mutex_unlock(&_mutex);
 }
 
 void SplashFlagController::handleResetButton() {
-    resetButtonState = digitalRead(4);
+    _resetButtonState = digitalRead(4);
     
-    if (resetButtonState == HIGH && !buttonWasPressed) {
-        resetButtonPressedTime = millis();
-        buttonWasPressed = true;
+    if (_resetButtonState == HIGH && !_buttonWasPressed) {
+        _resetButtonPressedTime = millis();
+        _buttonWasPressed = true;
     }
 
-    if (resetButtonState == HIGH && buttonWasPressed) {
-        unsigned long heldTime = millis() - resetButtonPressedTime;
+    if (_resetButtonState == HIGH && _buttonWasPressed) {
+        unsigned long heldTime = millis() - _resetButtonPressedTime;
         if (heldTime >= 10000) {
             factoryReset();
-            pthread_mutex_lock(&mutex);
-            servoFlag.moveTo(0);
-            pthread_mutex_unlock(&mutex);
+            pthread_mutex_lock(&_mutex);
+            _servoFlag.moveTo(0);
+            pthread_mutex_unlock(&_mutex);
             esp_restart();
         } else if (heldTime > 100) {
-            clearMqttMessages(); // Only clear MQTT messages, not system messages
+            clearMqttMessages();
         }
     }
 
-    if (resetButtonState == LOW) {
-        buttonWasPressed = false;
+    if (_resetButtonState == LOW) {
+        _buttonWasPressed = false;
     }
 }
 
@@ -371,12 +341,12 @@ void SplashFlagController::setDisplayMessage(const char* msg) {
     qMsg.message[sizeof(qMsg.message) - 1] = '\0';
     qMsg.durationSeconds = 0;
     qMsg.isIndefinite = true;
-    qMsg.stopAfterOneLoop = false;
-    qMsg.isFromMqtt = false; // Regular display messages are not from MQTT
+    qMsg.stopAfterOneLoop = true;
+    qMsg.isFromMqtt = false;
     
-    pthread_mutex_lock(&queueMutex);
-    messageQueue.push(qMsg);
-    pthread_mutex_unlock(&queueMutex);
+    pthread_mutex_lock(&_queueMutex);
+    _messageQueue.push(qMsg);
+    pthread_mutex_unlock(&_queueMutex);
 }
 
 void SplashFlagController::setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds) {
@@ -388,14 +358,11 @@ void SplashFlagController::setDisplayMessageWithDuration(const char* msg, unsign
     strncpy(qMsg.message, msg, sizeof(qMsg.message) - 1);
     qMsg.message[sizeof(qMsg.message) - 1] = '\0';
     
-    // Calculate how many screens this message will need
     int screen_count = 0;
     LCDScreen temp_screens[50];
-    lcd.formatForLcd(qMsg.message, &screen_count, &temp_screens);
+    _lcd.formatForLcd(qMsg.message, &screen_count, &temp_screens);
     
-    // Ensure duration is long enough to show all screens
-    // Each screen needs SCROLL_DELAY milliseconds, so total time = screen_count * SCROLL_DELAY
-    unsigned long minDurationSeconds = (screen_count * SCROLL_DELAY) / 1000 + 1; // +1 for safety
+    unsigned long minDurationSeconds = (screen_count * SCROLL_DELAY) / 1000 + 1;
     if (durationSeconds < minDurationSeconds) {
         durationSeconds = minDurationSeconds;
     }
@@ -403,67 +370,59 @@ void SplashFlagController::setDisplayMessageWithDuration(const char* msg, unsign
     qMsg.durationSeconds = durationSeconds;
     qMsg.isIndefinite = false;
     qMsg.stopAfterOneLoop = stopAfterOneLoop;
-    qMsg.isFromMqtt = false; // Regular display messages are not from MQTT
+    qMsg.isFromMqtt = false;
     
-    pthread_mutex_lock(&queueMutex);
-    messageQueue.push(qMsg);
-    pthread_mutex_unlock(&queueMutex);
+    pthread_mutex_lock(&_queueMutex);
+    _messageQueue.push(qMsg);
+    pthread_mutex_unlock(&_queueMutex);
 }
 
 void SplashFlagController::clearDisplay() {
-    pthread_mutex_lock(&queueMutex);
-    // Clear the entire queue
-    while (!messageQueue.empty()) {
-        messageQueue.pop();
+    pthread_mutex_lock(&_queueMutex);
+    while (!_messageQueue.empty()) {
+        _messageQueue.pop();
     }
-    pthread_mutex_unlock(&queueMutex);
+    pthread_mutex_unlock(&_queueMutex);
     
-    // Force stop the current message immediately
-    pthread_mutex_lock(&mutex);
-    forceStop = true;
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&_mutex);
+    _forceStop = true;
+    pthread_mutex_unlock(&_mutex);
 }
 
 void SplashFlagController::clearMqttMessages() {
-    pthread_mutex_lock(&queueMutex);
+    pthread_mutex_lock(&_queueMutex);
     
-    // Only clear MQTT messages from the queue, preserve system messages
     std::queue<QueuedMessage> tempQueue;
-    while (!messageQueue.empty()) {
-        QueuedMessage existingMsg = messageQueue.front();
-        messageQueue.pop();
-        // Keep non-MQTT messages in the queue
+    while (!_messageQueue.empty()) {
+        QueuedMessage existingMsg = _messageQueue.front();
+        _messageQueue.pop();
         if (!existingMsg.isFromMqtt) {
             tempQueue.push(existingMsg);
         }
     }
     
-    // Restore non-MQTT messages to the main queue
     while (!tempQueue.empty()) {
-        messageQueue.push(tempQueue.front());
+        _messageQueue.push(tempQueue.front());
         tempQueue.pop();
     }
     
-    pthread_mutex_unlock(&queueMutex);
+    pthread_mutex_unlock(&_queueMutex);
     
-    // Force stop current message only if it's from MQTT
-    pthread_mutex_lock(&mutex);
-    forceStop = true; // The display thread will check if current message is MQTT
-    pthread_mutex_unlock(&mutex);
+    pthread_mutex_lock(&_mutex);
+    _forceStop = true;
+    pthread_mutex_unlock(&_mutex);
 }
 
 bool SplashFlagController::shouldCheckForUpdate() {
-    // Check once per day (86400000 milliseconds = 24 hours)
-    const unsigned long UPDATE_CHECK_INTERVAL = 86400000UL; // 60000UL;
+    const unsigned long UPDATE_CHECK_INTERVAL = 86400000UL;
     
     unsigned long currentTime = millis();
     
-    // Handle millis() overflow (happens every ~49 days)
-    if (currentTime < lastFirmwareCheckTime) {
-        lastFirmwareCheckTime = 0;
+    if (currentTime < _lastFirmwareCheckTime) {
+        _lastFirmwareCheckTime = 0;
     }
     
-    return (currentTime - lastFirmwareCheckTime) >= UPDATE_CHECK_INTERVAL;
+    return (currentTime - _lastFirmwareCheckTime) >= UPDATE_CHECK_INTERVAL;
 }
 
 void SplashFlagController::checkForFirmwareUpdate() {
@@ -474,16 +433,15 @@ void SplashFlagController::checkForFirmwareUpdate() {
     
     Serial.println("Connecting to: " + url);
     
-    // Configure SSL for GitHub - use WiFiClientSecure for better SSL handling
     WiFiClientSecure *client = new WiFiClientSecure;
-    client->setInsecure(); // Skip SSL certificate verification
+    client->setInsecure();
     
     http.begin(*client, url);
-    http.setTimeout(15000); // 15 second timeout for GitHub API
-    http.addHeader("User-Agent", "SplashFlag-Device/1.0"); // GitHub requires User-Agent
-    http.addHeader("Authorization", "token " + String(GITHUB_TOKEN)); // Private repo authentication
-    http.addHeader("Accept", "application/vnd.github.v3+json"); // GitHub API version
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); // Follow any redirects
+    http.setTimeout(15000);
+    http.addHeader("User-Agent", "SplashFlag-Device/1.0");
+    http.addHeader("Authorization", "token " + String(GITHUB_TOKEN));
+    http.addHeader("Accept", "application/vnd.github.v3+json");
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     http.setReuse(false);
     
     int httpCode = http.GET();
@@ -502,7 +460,6 @@ void SplashFlagController::checkForFirmwareUpdate() {
             
             Serial.println("GitHub tag_name: " + serverTagName);
             
-            // Remove 'v' prefix if present for version comparison (e.g., "v1.0.1" -> "1.0.1")
             if (serverVersion.startsWith("v")) {
                 serverVersion = serverVersion.substring(1);
             }
@@ -511,10 +468,9 @@ void SplashFlagController::checkForFirmwareUpdate() {
             Serial.println("Latest GitHub release: " + serverVersion);
             
             if (serverVersion != currentVersion && serverVersion.length() > 0) {
-                firmwareUpdateAvailable = true;
-                latestFirmwareVersion = serverVersion;
+                _firmwareUpdateAvailable = true;
+                _latestFirmwareVersion = serverVersion;
                 
-                // Find the firmware binary asset in the release
                 JsonArray assets = doc["assets"];
                 String downloadUrl = "";
                 
@@ -532,11 +488,9 @@ void SplashFlagController::checkForFirmwareUpdate() {
                     Serial.println("Firmware update available: " + serverVersion);
                     setDisplayMessage(("Firmware update available: v" + serverVersion + ". Device will update automatically.").c_str());
                     
-                    // Store both version and download URL
-                    latestFirmwareVersion = serverVersion;
-                    firmwareDownloadUrl = downloadUrl;
+                    _latestFirmwareVersion = serverVersion;
+                    _firmwareDownloadUrl = downloadUrl;
                     
-                    // Automatically download and install the update
                     if (downloadAndInstallFirmware()) {
                         Serial.println("Firmware update completed. Restarting...");
                         ESP.restart();
@@ -572,31 +526,30 @@ void SplashFlagController::checkForFirmwareUpdate() {
     }
     
     http.end();
-    delete client; // Clean up WiFiClientSecure
-    lastFirmwareCheckTime = millis();
+    delete client;
+    _lastFirmwareCheckTime = millis();
 }
 
 bool SplashFlagController::downloadAndInstallFirmware() {
-    if (!firmwareUpdateAvailable || firmwareDownloadUrl.length() == 0) {
+    if (!_firmwareUpdateAvailable || _firmwareDownloadUrl.length() == 0) {
         return false;
     }
     
     Serial.println("Starting firmware download from GitHub...");
-    Serial.println("Download URL: " + firmwareDownloadUrl);
+    Serial.println("Download URL: " + _firmwareDownloadUrl);
     setDisplayMessage("Downloading firmware update...");
     
     HTTPClient http;
-    String url = firmwareDownloadUrl; // This now contains the GitHub download URL
+    String url = _firmwareDownloadUrl;
     
-    // Configure SSL for GitHub download
     WiFiClientSecure *client = new WiFiClientSecure;
-    client->setInsecure(); // Skip SSL certificate verification
+    client->setInsecure();
     
     http.begin(*client, url);
-    http.setTimeout(60000); // 60 second timeout for GitHub download
-    http.addHeader("User-Agent", "SplashFlag-Device/1.0"); // GitHub requires User-Agent
-    http.addHeader("Authorization", "token " + String(GITHUB_TOKEN)); // Private repo authentication
-    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); // Follow GitHub redirects
+    http.setTimeout(60000);
+    http.addHeader("User-Agent", "SplashFlag-Device/1.0");
+    http.addHeader("Authorization", "token " + String(GITHUB_TOKEN));
+    http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS);
     
     int httpCode = http.GET();
     
@@ -650,7 +603,6 @@ bool SplashFlagController::downloadAndInstallFirmware() {
             
             written += bytesRead;
             
-            // Show progress
             int progress = (written * 100) / contentLength;
             if (progress % 10 == 0) {
                 Serial.println("Firmware install progress: " + String(progress) + "%");
@@ -675,19 +627,18 @@ bool SplashFlagController::downloadAndInstallFirmware() {
     setDisplayMessage("Firmware update completed. Restarting...");
     
     http.end();
-    delete client; // Clean up WiFiClientSecure
+    delete client;
     return true;
 }
 
 bool SplashFlagController::isDebugDevice() {
     String mac = WiFi.macAddress();
-    String macSuffix = mac.substring(mac.length() - 8); // Get last 8 chars (includes colons)
-    macSuffix.replace(":", ""); // Remove colons to get last 6 hex chars
-    macSuffix.toUpperCase(); // Ensure uppercase for comparison
+    String macSuffix = mac.substring(mac.length() - 8);
+    macSuffix.replace(":", "");
+    macSuffix.toUpperCase();
     
     Serial.println("Device MAC suffix: " + macSuffix);
     
-    // Check against authorized debug device MACs
     if (macSuffix == String(DEBUG_DEVICE_MAC_1)) {
         return true;
     }

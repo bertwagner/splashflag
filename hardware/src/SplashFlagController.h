@@ -27,64 +27,60 @@ struct QueuedMessage {
 };
 
 class SplashFlagController {
-private:
-    Lcd& lcd;
-    ServoFlag& servoFlag;
-    CredentialManager& credentialManager;
-    CaptivePortal& portal;
-    
-    int resetButtonState;
-    bool mqttInitialized;
-    unsigned long flagUpSecondsEndTime;
-    char message[512];
-    pthread_mutex_t mutex;
-    
-    std::queue<QueuedMessage> messageQueue;
-    pthread_mutex_t queueMutex;
-    
-    bool forceStop;
-    
-    // Firmware update variables
-    unsigned long lastFirmwareCheckTime;
-    bool firmwareUpdateAvailable;
-    String latestFirmwareVersion;
-    String firmwareDownloadUrl;
-    
-    static unsigned long resetButtonPressedTime;
-    static bool buttonWasPressed;
-    
-    WebSocketsClient client;
-    MQTTPubSub::PubSubClient<512> mqtt;
+    public:
+        SplashFlagController(Lcd& lcd, ServoFlag& servoFlag, CredentialManager& credentialManager, CaptivePortal& portal);
+        ~SplashFlagController();
+        
+        void init();
+        void update();
+        
+        bool shouldStopDisplaying();
+        void connect();
+        void factoryReset();
+        static void* display_thread(void* arg);
+        void handleMqttMessage(const char* topic, const String& payload, const size_t size);
+        void handleResetButton();
+        void setDisplayMessage(const char* msg);
+        void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds);
+        void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds, bool stopAfterOneLoop);
+        void clearDisplay();
+        void clearMqttMessages();
+        
+        void checkForFirmwareUpdate();
+        bool downloadAndInstallFirmware();
+        bool shouldCheckForUpdate();
+        
+        bool isDebugDevice();
+        
+        bool getMqttInitialized() const { return _mqttInitialized; }
+        void setMqttInitialized(bool value) { _mqttInitialized = value; }
+        MQTTPubSub::PubSubClient<512>& getMqtt() { return _mqtt; }
 
-public:
-    SplashFlagController(Lcd& lcd, ServoFlag& servoFlag, CredentialManager& credentialManager, CaptivePortal& portal);
-    ~SplashFlagController();
-    
-    void init();
-    void update();
-    
-    bool shouldStopDisplaying();
-    void connect();
-    void factoryReset();
-    static void* display_thread(void* arg);
-    void handleMqttMessage(const char* topic, const String& payload, const size_t size);
-    void handleResetButton();
-    void setDisplayMessage(const char* msg);
-    void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds);
-    void setDisplayMessageWithDuration(const char* msg, unsigned long durationSeconds, bool stopAfterOneLoop);
-    void clearDisplay();
-    void clearMqttMessages();
-    
-    // Firmware update methods
-    void checkForFirmwareUpdate();
-    bool downloadAndInstallFirmware();
-    bool shouldCheckForUpdate();
-    
-    // Debug helper
-    bool isDebugDevice();
-    
-    bool getMqttInitialized() const { return mqttInitialized; }
-    void setMqttInitialized(bool value) { mqttInitialized = value; }
-    MQTTPubSub::PubSubClient<512>& getMqtt() { return mqtt; }
+    private:
+        Lcd& _lcd;
+        ServoFlag& _servoFlag;
+        CredentialManager& _credentialManager;
+        CaptivePortal& _portal;
+        
+        int _resetButtonState;
+        bool _mqttInitialized;
+        unsigned long _flagUpSecondsEndTime;
+        char _message[512];
+        pthread_mutex_t _mutex;
+        
+        std::queue<QueuedMessage> _messageQueue;
+        pthread_mutex_t _queueMutex;
+        
+        bool _forceStop;
+        
+        unsigned long _lastFirmwareCheckTime;
+        bool _firmwareUpdateAvailable;
+        String _latestFirmwareVersion;
+        String _firmwareDownloadUrl;
+        
+        static unsigned long _resetButtonPressedTime;
+        static bool _buttonWasPressed;
+        
+        WebSocketsClient _client;
+        MQTTPubSub::PubSubClient<512> _mqtt;
 };
-
