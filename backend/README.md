@@ -19,3 +19,4 @@ The Splashflag hardware is then able to receive MQTT messages from this broker.
 
 Make sure the environment variables `$MOSQUITTO_PASSWORD`, `$CLOUDFLARE_TUNNEL_TOKEN` are set.
 
+If using the web app to send messages, you also need to add the $MOSQUITTO_PASSWORD to /mosquitto/http/secrets.js.
