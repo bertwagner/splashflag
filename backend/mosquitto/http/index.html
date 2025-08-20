@@ -174,6 +174,21 @@
             display: inline-block;
         }
 
+        .byte-counter {
+            font-size: 0.8rem;
+            color: #6c757d;
+            margin-top: 5px;
+            text-align: right;
+        }
+
+        .byte-counter.warning {
+            color: #856404;
+        }
+
+        .byte-counter.error {
+            color: #721c24;
+        }
+
         .publish-btn {
             width: 100%;
             padding: 15px;
@@ -291,6 +306,7 @@
             <div class="form-group">
                 <label for="message">Message:</label>
                 <textarea id="message" required></textarea>
+                <div class="byte-counter" id="byteCounter">0 / 480 bytes</div>
             </div>
 
             <button type="submit" class="publish-btn" id="publishBtn">Publish Message</button>
@@ -350,6 +366,53 @@
                     const endDisplay = this.formatDisplayTime(endTime);
                     const message = `We're swimming from ${startDisplay} until ${endDisplay}. Come swim!`;
                     document.getElementById('message').value = message;
+                    this.validateMessage();
+                }
+            }
+
+            validateMessage() {
+                const messageEl = document.getElementById('message');
+                const counterEl = document.getElementById('byteCounter');
+                let message = messageEl.value;
+                
+                // Count bytes (UTF-8 encoding)
+                const byteCount = new TextEncoder().encode(message).length;
+                
+                // Trim message if it exceeds 480 bytes
+                if (byteCount > 480) {
+                    // Trim by binary search to find the largest substring that fits in 480 bytes
+                    let start = 0;
+                    let end = message.length;
+                    let validLength = 0;
+                    
+                    while (start <= end) {
+                        const mid = Math.floor((start + end) / 2);
+                        const substr = message.substring(0, mid);
+                        const testByteCount = new TextEncoder().encode(substr).length;
+                        
+                        if (testByteCount <= 480) {
+                            validLength = mid;
+                            start = mid + 1;
+                        } else {
+                            end = mid - 1;
+                        }
+                    }
+                    
+                    messageEl.value = message.substring(0, validLength);
+                    message = messageEl.value;
+                }
+                
+                // Update counter display
+                const finalByteCount = new TextEncoder().encode(message).length;
+                counterEl.textContent = `${finalByteCount} / 480 bytes`;
+                
+                // Update counter styling based on byte count
+                counterEl.className = 'byte-counter';
+                if (finalByteCount > 400) {
+                    counterEl.classList.add('warning');
+                }
+                if (finalByteCount >= 480) {
+                    counterEl.classList.add('error');
                 }
             }
 
@@ -380,6 +443,10 @@
 
                 document.getElementById('debugMode').addEventListener('change', () => {
                     this.updateTopicDisplay();
+                });
+
+                document.getElementById('message').addEventListener('input', () => {
+                    this.validateMessage();
                 });
 
                 document.getElementById('mqttForm').addEventListener('submit', (e) => {

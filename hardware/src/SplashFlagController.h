@@ -54,7 +54,7 @@ class SplashFlagController {
         
         bool getMqttInitialized() const { return _mqttInitialized; }
         void setMqttInitialized(bool value) { _mqttInitialized = value; }
-        MQTTPubSub::PubSubClient<512>& getMqtt() { return _mqtt; }
+        MQTTPubSub::PubSubClient<1024>& getMqtt() { return _mqtt; }
 
     private:
         Lcd& _lcd;
@@ -82,5 +82,5 @@ class SplashFlagController {
         static bool _buttonWasPressed;
         
         WebSocketsClient _client;
-        MQTTPubSub::PubSubClient<512> _mqtt;
+        MQTTPubSub::PubSubClient<1024> _mqtt;
 };

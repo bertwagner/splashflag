@@ -232,6 +232,11 @@ void* SplashFlagController::display_thread(void* arg) {
 }
 
 void SplashFlagController::handleMqttMessage(const char* topic, const String& payload, const size_t size) {
+    if (size > 480) {
+        Serial.printf("MQTT message too long (%zu bytes), maximum is 480. Message ignored.\n", size);
+        return;
+    }
+    
     Serial.println(payload);
     JsonDocument doc;
     DeserializationError error = deserializeJson(doc, payload);
