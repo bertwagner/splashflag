@@ -93,6 +93,11 @@ connect_to_host:
         }
     }
     Serial.println(" connected!");
+    
+    // Force stop any currently displaying message (like "Connecting to SplashFlag...")
+    pthread_mutex_lock(&_mutex);
+    _forceStop = true;
+    pthread_mutex_unlock(&_mutex);
 }
 
 void SplashFlagController::factoryReset() {
@@ -131,9 +136,7 @@ void* SplashFlagController::display_thread(void* arg) {
             pthread_mutex_unlock(&controller->_mutex);
             
             if (force_stop_requested) {
-                if (current_message_is_from_mqtt) {
-                    should_stop = true;
-                }
+                should_stop = true;
             } else if (current_message_indefinite) {
                 unsigned long elapsed_time = millis() - message_start_time;
                 unsigned long min_display_time = screen_count * SCROLL_DELAY + 1000;
